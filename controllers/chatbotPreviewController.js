@@ -11,7 +11,6 @@ import { Readable } from "stream";
 // --------------------
 async function getFileContentFromSupabase(fileUrl) {
   if (!fileUrl) return "";
-
   try {
     const response = await fetch(fileUrl);
     const buffer = await response.arrayBuffer();
@@ -46,121 +45,124 @@ async function getFileContentFromSupabase(fileUrl) {
 // --------------------
 export const getChatbotPreviewReply = async (req, res) => {
   try {
-    const { messages = [], chatbotConfig = {}, userId } = req.body || {};
-
+    const { messages = [], userId } = req.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "Messages array is required.",
-      });
+      return res.status(400).json({ success: false, error: "Messages array is required." });
     }
 
-    const lastUserMessage =
-      messages[messages.length - 1]?.content?.toString()?.trim() || "Hi";
+    const lastUserMessage = messages[messages.length - 1]?.content?.toString()?.trim() || "Hi";
 
-    // If no config
-    if (!chatbotConfig?.businessDescription && !chatbotConfig?.name) {
+    if (!userId) {
+      return res.status(400).json({ success: false, error: "User ID is required for chatbot preview." });
+    }
+
+    // -------------------- Fetch chatbot configuration --------------------
+    const { data: chatbotConfig, error: cfgError } = await supabase
+      .from("chatbot_configs")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (cfgError) {
+      console.error("[ChatbotPreview] Supabase config fetch error:", cfgError.message);
+      return res.status(500).json({ success: false, error: "Failed to fetch chatbot config." });
+    }
+
+    if (!chatbotConfig) {
       return res.status(200).json({
         success: true,
-        reply: "🤖 This is a chatbot preview (mock response).",
+        reply: "🤖 This is a chatbot preview — no configuration found for this user.",
       });
     }
 
-    // -------------------- Fetch user integrations --------------------
+    // -------------------- Extract config details --------------------
+    const businessName = chatbotConfig?.name || "this business";
+    const description = chatbotConfig?.businessDescription || "No description provided.";
+    const website = chatbotConfig?.websiteUrl || "N/A";
+    const address = chatbotConfig?.businessAddress || "N/A";
+    const files = chatbotConfig?.files || [];
+
+    // -------------------- Fetch Calendly link --------------------
     let calendlyLink = null;
-    try {
-      const { data: integrations } = await supabase
-        .from("user_integrations")
-        .select("calendly_link")
-        .eq("user_id", userId)
-        .maybeSingle();
+    const { data: integrations } = await supabase
+      .from("user_integrations")
+      .select("calendly_link")
+      .eq("user_id", userId)
+      .maybeSingle();
+    calendlyLink = integrations?.calendly_link || null;
 
-      calendlyLink = integrations?.calendly_link || null;
-    } catch (err) {
-      console.warn("[ChatbotPreview] Could not fetch integrations:", err.message);
-    }
-
-    // -------------------- Detect keywords for specific intents --------------------
+    // -------------------- Handle Intent: Book Meeting --------------------
     const lowerMsg = lastUserMessage.toLowerCase();
-
-    if (
-      ["book", "meeting", "appointment", "schedule", "demo"].some((kw) =>
-        lowerMsg.includes(kw)
-      )
-    ) {
+    if (["book", "meeting", "appointment", "schedule", "demo"].some((kw) => lowerMsg.includes(kw))) {
       if (calendlyLink) {
         return res.status(200).json({
           success: true,
           reply: `📅 You can book a meeting here: ${calendlyLink}`,
         });
-      } else {
-        return res.status(200).json({
-          success: true,
-          reply:
-            "I don’t have a booking link yet. Please add your Calendly link in Integrations.",
-        });
       }
+      return res.status(200).json({
+        success: true,
+        reply: "I don’t have a booking link yet. Please add your Calendly link in Integrations.",
+      });
     }
 
+    // -------------------- Handle Intent: Address --------------------
     if (["address", "location", "where"].some((kw) => lowerMsg.includes(kw))) {
-      if (chatbotConfig.businessAddress) {
+      if (address && address !== "N/A") {
         return res.status(200).json({
           success: true,
-          reply: `📍 Our business address is: ${chatbotConfig.businessAddress}`,
-        });
-      } else {
-        return res.status(200).json({
-          success: true,
-          reply: "No address provided yet for this business.",
+          reply: `📍 Our business address is: ${address}`,
         });
       }
+      return res.status(200).json({
+        success: true,
+        reply: "No address provided yet for this business.",
+      });
     }
 
+    // -------------------- Handle Intent: Website --------------------
     if (["website", "site", "link"].some((kw) => lowerMsg.includes(kw))) {
-      if (chatbotConfig.websiteUrl) {
+      if (website && website !== "N/A") {
         return res.status(200).json({
           success: true,
-          reply: `🌐 You can visit our website here: ${chatbotConfig.websiteUrl}`,
-        });
-      } else {
-        return res.status(200).json({
-          success: true,
-          reply: "This business doesn’t have a website linked yet.",
+          reply: `🌐 You can visit our website here: ${website}`,
         });
       }
+      return res.status(200).json({
+        success: true,
+        reply: "This business doesn’t have a website linked yet.",
+      });
     }
 
-    // -------------------- Fetch uploaded files --------------------
+    // -------------------- Include Uploaded Files --------------------
     const knowledge = [];
-    if (chatbotConfig?.files?.length) {
-      for (const file of chatbotConfig.files) {
-        const text = await getFileContentFromSupabase(file.publicUrl);
-        knowledge.push({ name: file.name, content: text });
-      }
+    for (const file of files) {
+      const text = await getFileContentFromSupabase(file.publicUrl);
+      knowledge.push({ name: file.name, content: text });
     }
 
-    // -------------------- Improved AI Prompt --------------------
-    const businessName = chatbotConfig?.name || "this business";
-    const description = chatbotConfig?.businessDescription || "No description provided.";
-    const website = chatbotConfig?.websiteUrl || "N/A";
-    const address = chatbotConfig?.businessAddress || "N/A";
-
+    // -------------------- AI System Prompt --------------------
     const systemPrompt = `
-You are a professional AI assistant representing the business "${businessName}".
-Here is what you know about this business:
-Business Description: ${description}
+You are an intelligent AI assistant representing the business "${businessName}".
+
+Official Business Details:
+---
+Description: ${description}
 Website: ${website}
 Address: ${address}
+---
 
-You must always speak as if you are this business's chatbot — confident, helpful, and specific.
-Never say you don’t have information or knowledge about the company.
-Use the provided business description and uploaded files as your full source of truth.
-If users ask about what the business does, explain clearly based on the description.
-If users ask something unrelated, politely redirect to business-related topics.
+Uploaded Knowledge Files:
+${JSON.stringify(knowledge, null, 2)}
 
-Additional uploaded data: ${JSON.stringify(knowledge, null, 2)}
+Rules:
+- Always act as the business representative.
+- Never say you don’t know about the business — use the info above confidently.
+- Answer based ONLY on the provided business info and uploaded data.
+- Be conversational, professional, and brief.
 `;
 
+    // -------------------- Ask Groq AI --------------------
     const aiResponse = await askLLM({
       systemPrompt,
       userPrompt: lastUserMessage,
@@ -175,6 +177,7 @@ Additional uploaded data: ${JSON.stringify(knowledge, null, 2)}
       });
     }
 
+    // -------------------- Fallback --------------------
     return res.status(200).json({
       success: true,
       reply: "🤖 Sorry, I couldn’t find an answer for that right now.",

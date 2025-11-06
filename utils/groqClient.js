@@ -5,22 +5,25 @@ import supabase from "../config/supabaseClient.js";
 
 const { GROQ_API_KEY, NODE_ENV } = process.env;
 
+// ---------------------------------------------
+// Initialize Groq client
+// ---------------------------------------------
 let groq = null;
 if (GROQ_API_KEY) {
   groq = new Groq({ apiKey: GROQ_API_KEY });
-  if (NODE_ENV !== "production") console.log("[Groq] ✅ Client initialized.");
+  if (NODE_ENV !== "production") console.log("[Groq] ✅ Client initialized successfully.");
 } else {
-  console.warn("[Groq] ⚠️ GROQ_API_KEY not set — using mock mode.");
+  console.warn("[Groq] ⚠️ GROQ_API_KEY not found. Using mock responses.");
 }
 
 // ---------------------------------------------
-// Default + fallback models
+// Model priority (auto-fallback order)
 // ---------------------------------------------
 const RECOMMENDED_MODELS = [
-  "llama-3.1-8b-instant",       // ✅ Fastest for previews
-  "llama-3.1-70b-versatile",    // ✅ High-quality reasoning
-  "mixtral-8x7b",               // ✅ Strong multilingual
-  "gemma-7b-it",                // ✅ Lightweight fallback
+  "llama-3.1-8b-instant",      // Fast, accurate — best for production
+  "llama-3.1-70b-versatile",   // Strong reasoning fallback
+  "mixtral-8x7b",              // Multi-language + long context
+  "gemma-7b-it",               // Lightweight fallback
 ];
 
 // ---------------------------------------------
@@ -28,11 +31,60 @@ const RECOMMENDED_MODELS = [
 // ---------------------------------------------
 function mockReply({ message, businessName }) {
   const base = businessName ? `(${businessName}) ` : "";
-  return `${base}Preview mode: I received "${message}". Connect Groq for real AI answers.`;
+  return `${base}Mock AI: I received "${message}". Connect Groq API for real answers.`;
 }
 
 // ---------------------------------------------
-// Ask LLM (with auto-fallback & dynamic files)
+// Helper: Fetch chatbot knowledge from Supabase
+// ---------------------------------------------
+async function getChatbotKnowledge(userId, chatbotId) {
+  let context = "";
+
+  try {
+    if (!userId || !chatbotId) return context;
+
+    const { data: chatbotData, error: chatErr } = await supabase
+      .from("chatbots")
+      .select("config")
+      .eq("id", chatbotId)
+      .eq("user_id", userId)
+      .single();
+
+    if (chatErr && chatErr.code !== "PGRST116") {
+      console.warn("[Groq] ⚠️ Could not fetch chatbot config:", chatErr.message);
+      return context;
+    }
+
+    const config = chatbotData?.config || {};
+    const files = config?.files || [];
+
+    for (let f of files) {
+      try {
+        const { data: fileData, error: fileErr } = await supabase.storage
+          .from("chatbot-files")
+          .download(f.path);
+        if (fileErr) continue;
+
+        const text = await fileData.text();
+        context += `\nFile "${f.name}": ${text.slice(0, 4000)}\n`;
+      } catch (fileEx) {
+        console.warn(`[Groq] ⚠️ Error reading file ${f.name}:`, fileEx.message);
+      }
+    }
+
+    if (config?.website_content) {
+      context += `\nWebsite content:\n${config.website_content.slice(0, 4000)}\n`;
+    }
+
+  } catch (err) {
+    console.error("[Groq] ⚠️ Error fetching Supabase knowledge:", err.message);
+  }
+
+  return context;
+}
+
+// ---------------------------------------------
+// Ask Groq LLM (with fallback + context)
 // ---------------------------------------------
 export async function askLLM({
   systemPrompt,
@@ -42,46 +94,21 @@ export async function askLLM({
   userId,
   chatbotId,
 }) {
+  // ------------------ No Groq API key → Mock mode ------------------
   if (!groq) {
-    return { ok: true, content: mockReply({ message: userPrompt, businessName }), provider: "mock" };
+    return {
+      ok: true,
+      content: mockReply({ message: userPrompt, businessName }),
+      provider: "mock",
+    };
   }
 
   try {
-    let extraContext = "";
-
-    // ------------------ Fetch chatbot files & scraped content ------------------
-    if (userId && chatbotId) {
-      const { data: chatbotData, error: chatErr } = await supabase
-        .from("chatbots")
-        .select("config")
-        .eq("id", chatbotId)
-        .eq("user_id", userId)
-        .single();
-
-      if (chatErr && chatErr.code !== "PGRST116") {
-        console.warn("[Groq] ⚠️ Could not fetch chatbot config:", chatErr.message);
-      }
-
-      const files = chatbotData?.config?.files || [];
-      for (let f of files) {
-        try {
-          const { data: fileData, error: fileErr } = await supabase.storage.from("chatbot-files").download(f.path);
-          if (fileErr) continue;
-          const text = await fileData.text();
-          extraContext += `\nFile "${f.name}": ${text}`;
-        } catch (fileEx) {
-          console.warn(`[Groq] ⚠️ Error reading file ${f.name}:`, fileEx.message);
-        }
-      }
-
-      if (chatbotData?.config?.website_content) {
-        extraContext += `\nWebsite content: ${chatbotData.config.website_content}`;
-      }
-    }
-
+    // ------------------ Fetch contextual data ------------------
+    const extraContext = await getChatbotKnowledge(userId, chatbotId);
     const finalPrompt = `${systemPrompt}\n${extraContext}`;
 
-    // ------------------ Attempt each model (auto-fallback) ------------------
+    // ------------------ Model Fallback Logic ------------------
     for (const selectedModel of [model, ...RECOMMENDED_MODELS]) {
       try {
         const completion = await groq.chat.completions.create({
@@ -99,23 +126,29 @@ export async function askLLM({
           "🤖 Sorry, I couldn’t generate a response.";
 
         if (NODE_ENV !== "production")
-          console.log(`[Groq] ✅ Using model: ${selectedModel}`);
+          console.log(`[Groq] ✅ Model used: ${selectedModel}`);
 
         return { ok: true, content, provider: "groq" };
       } catch (err) {
         const msg = err?.message || err?.error?.message || err;
-        if (msg.includes("decommissioned") || msg.includes("unsupported")) {
-          console.warn(`[Groq] ⚠️ Model ${selectedModel} is deprecated. Trying next fallback...`);
+        if (
+          msg.includes("decommissioned") ||
+          msg.includes("unsupported") ||
+          msg.includes("not found")
+        ) {
+          console.warn(`[Groq] ⚠️ Model ${selectedModel} deprecated. Trying next...`);
           continue; // try next model
         }
-        throw err; // other errors (network, auth, etc.)
+        throw err;
       }
     }
 
-    // If all models failed
-    console.error("[Groq] ❌ All fallback models failed.");
-    return { ok: true, content: "AI service temporarily unavailable. Please try again soon.", provider: "mock" };
-
+    console.error("[Groq] ❌ All models failed.");
+    return {
+      ok: true,
+      content: "AI service temporarily unavailable. Please try again soon.",
+      provider: "mock",
+    };
   } catch (err) {
     console.error("[Groq] Unexpected error:", err?.message || err);
     return {
