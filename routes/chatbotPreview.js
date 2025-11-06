@@ -1,7 +1,6 @@
 // backend/routes/chatbotPreview.js
 import express from "express";
 import { getChatbotPreviewReply } from "../controllers/chatbotPreviewController.js";
-import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,7 +12,8 @@ const router = express.Router();
 router.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "✅ Chatbot preview endpoint is active and ready for POST requests",
+    message:
+      "✅ Chatbot preview endpoint is active. Use POST /api/chatbot-preview to test chatbot replies.",
   });
 });
 
@@ -26,13 +26,8 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 /**
  * ✅ POST /api/chatbot-preview
- * In production → requires auth
- * In development → no auth for easier testing
+ * Public route — no auth required (for Builder preview)
  */
-router.post(
-  "/",
-  process.env.NODE_ENV === "production" ? requireAuth : (req, res, next) => next(),
-  asyncHandler(getChatbotPreviewReply)
-);
+router.post("/", asyncHandler(getChatbotPreviewReply));
 
 export default router;
