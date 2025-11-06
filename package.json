@@ -1,0 +1,47 @@
+{
+  "name": "aiaera-backend",
+  "version": "1.0.0",
+  "description": "Backend for AIAERA SaaS app",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --enable-source-maps index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "express",
+    "supabase",
+    "saas",
+    "chatbot"
+  ],
+  "author": "AIAERA Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.54.0",
+    "axios": "^1.11.0",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "groq-sdk": "^0.30.0",
+    "helmet": "^8.1.0",
+    "json2csv": "^5.0.6",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "node-fetch": "^3.3.2",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse-fixed": "^1.1.1",
+    "razorpay": "^2.9.6",
+    "tesseract.js": "^6.0.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
