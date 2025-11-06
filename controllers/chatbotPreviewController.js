@@ -34,7 +34,6 @@ async function getFileContentFromSupabase(fileUrl) {
       return JSON.stringify(rows).slice(0, 8000);
     }
 
-    // Default text
     return Buffer.from(buffer).toString("utf-8").slice(0, 8000);
   } catch (err) {
     console.error("[ChatbotPreview] File parse error:", err.message);
@@ -59,7 +58,6 @@ export const getChatbotPreviewReply = async (req, res) => {
     const lastUserMessage =
       messages[messages.length - 1]?.content?.toString()?.trim() || "Hi";
 
-    // Default if no chatbot config
     if (!chatbotConfig?.name && !chatbotConfig?.businessDescription) {
       return res.status(200).json({
         success: true,
@@ -67,7 +65,74 @@ export const getChatbotPreviewReply = async (req, res) => {
       });
     }
 
-    // Collect knowledge from uploaded files
+    // -------------------- Fetch extra user data --------------------
+    let calendlyLink = null;
+    let address = chatbotConfig?.businessAddress || null;
+    let website = chatbotConfig?.websiteUrl || null;
+
+    try {
+      const { data: integrations } = await supabase
+        .from("user_integrations")
+        .select("calendly_link")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      calendlyLink = integrations?.calendly_link || null;
+    } catch (err) {
+      console.warn("[ChatbotPreview] Could not fetch integrations:", err.message);
+    }
+
+    // -------------------- Detect special intents --------------------
+    const lowerMsg = lastUserMessage.toLowerCase();
+
+    if (
+      ["book", "meeting", "appointment", "schedule", "demo"].some((kw) =>
+        lowerMsg.includes(kw)
+      )
+    ) {
+      if (calendlyLink) {
+        return res.status(200).json({
+          success: true,
+          reply: `📅 You can book a meeting here: ${calendlyLink}`,
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          reply:
+            "I don’t have a booking link yet. Please add your Calendly link in Integrations.",
+        });
+      }
+    }
+
+    if (["address", "location", "where"].some((kw) => lowerMsg.includes(kw))) {
+      if (address) {
+        return res.status(200).json({
+          success: true,
+          reply: `📍 Our business address is: ${address}`,
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          reply: "No address provided yet for this business.",
+        });
+      }
+    }
+
+    if (["website", "site", "link"].some((kw) => lowerMsg.includes(kw))) {
+      if (website) {
+        return res.status(200).json({
+          success: true,
+          reply: `🌐 You can visit our website here: ${website}`,
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          reply: "This business doesn’t have a website linked yet.",
+        });
+      }
+    }
+
+    // -------------------- Parse file data --------------------
     const knowledge = [];
     if (chatbotConfig?.files?.length) {
       for (const file of chatbotConfig.files) {
@@ -76,37 +141,31 @@ export const getChatbotPreviewReply = async (req, res) => {
       }
     }
 
-    // Ask Groq model (LLM)
-    try {
-      const aiResponse = await askLLM({
-        systemPrompt: `You are an AI assistant representing ${
-          chatbotConfig?.name || "a business"
-        }.
-Business description: ${chatbotConfig?.businessDescription || "N/A"}.
-Respond conversationally to the user's message.`,
-        userPrompt: lastUserMessage,
-        model: process.env.LLM_MODEL || "gemma2-9b-it",
-      });
+    // -------------------- Ask AI (Groq) --------------------
+    const aiResponse = await askLLM({
+      systemPrompt: `
+You are a friendly and professional AI assistant for ${chatbotConfig?.name}.
+Business description: ${chatbotConfig?.businessDescription}.
+Use the following files and website as context if needed:
+${JSON.stringify(knowledge)}
+If the user asks something unrelated, politely guide them back to the business topic.
+      `,
+      userPrompt: lastUserMessage,
+      model: process.env.LLM_MODEL || "gemma2-9b-it",
+    });
 
-      if (aiResponse?.ok && aiResponse?.content) {
-        return res.status(200).json({
-          success: true,
-          reply: aiResponse.content,
-          knowledge,
-          provider: "groq",
-        });
-      }
-    } catch (err) {
-      console.error("[ChatbotPreview] LLM error:", err.message);
+    if (aiResponse?.ok && aiResponse?.content) {
+      return res.status(200).json({
+        success: true,
+        reply: aiResponse.content,
+        knowledge,
+        provider: "groq",
+      });
     }
 
-    // Default fallback if AI fails
     return res.status(200).json({
       success: true,
-      reply: `🤖 Hello! This is a fallback chatbot preview for ${
-        chatbotConfig?.name || "your business"
-      }.`,
-      provider: "mock",
+      reply: "🤖 Sorry, I couldn’t find an answer for that right now.",
     });
   } catch (err) {
     console.error("[ChatbotPreview] Unexpected error:", err.message);
