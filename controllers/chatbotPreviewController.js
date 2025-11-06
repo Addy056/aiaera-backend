@@ -58,18 +58,16 @@ export const getChatbotPreviewReply = async (req, res) => {
     const lastUserMessage =
       messages[messages.length - 1]?.content?.toString()?.trim() || "Hi";
 
-    if (!chatbotConfig?.name && !chatbotConfig?.businessDescription) {
+    // If no config
+    if (!chatbotConfig?.businessDescription && !chatbotConfig?.name) {
       return res.status(200).json({
         success: true,
         reply: "🤖 This is a chatbot preview (mock response).",
       });
     }
 
-    // -------------------- Fetch extra user data --------------------
+    // -------------------- Fetch user integrations --------------------
     let calendlyLink = null;
-    let address = chatbotConfig?.businessAddress || null;
-    let website = chatbotConfig?.websiteUrl || null;
-
     try {
       const { data: integrations } = await supabase
         .from("user_integrations")
@@ -82,7 +80,7 @@ export const getChatbotPreviewReply = async (req, res) => {
       console.warn("[ChatbotPreview] Could not fetch integrations:", err.message);
     }
 
-    // -------------------- Detect special intents --------------------
+    // -------------------- Detect keywords for specific intents --------------------
     const lowerMsg = lastUserMessage.toLowerCase();
 
     if (
@@ -105,10 +103,10 @@ export const getChatbotPreviewReply = async (req, res) => {
     }
 
     if (["address", "location", "where"].some((kw) => lowerMsg.includes(kw))) {
-      if (address) {
+      if (chatbotConfig.businessAddress) {
         return res.status(200).json({
           success: true,
-          reply: `📍 Our business address is: ${address}`,
+          reply: `📍 Our business address is: ${chatbotConfig.businessAddress}`,
         });
       } else {
         return res.status(200).json({
@@ -119,10 +117,10 @@ export const getChatbotPreviewReply = async (req, res) => {
     }
 
     if (["website", "site", "link"].some((kw) => lowerMsg.includes(kw))) {
-      if (website) {
+      if (chatbotConfig.websiteUrl) {
         return res.status(200).json({
           success: true,
-          reply: `🌐 You can visit our website here: ${website}`,
+          reply: `🌐 You can visit our website here: ${chatbotConfig.websiteUrl}`,
         });
       } else {
         return res.status(200).json({
@@ -132,7 +130,7 @@ export const getChatbotPreviewReply = async (req, res) => {
       }
     }
 
-    // -------------------- Parse file data --------------------
+    // -------------------- Fetch uploaded files --------------------
     const knowledge = [];
     if (chatbotConfig?.files?.length) {
       for (const file of chatbotConfig.files) {
@@ -141,15 +139,30 @@ export const getChatbotPreviewReply = async (req, res) => {
       }
     }
 
-    // -------------------- Ask AI (Groq) --------------------
+    // -------------------- Improved AI Prompt --------------------
+    const businessName = chatbotConfig?.name || "this business";
+    const description = chatbotConfig?.businessDescription || "No description provided.";
+    const website = chatbotConfig?.websiteUrl || "N/A";
+    const address = chatbotConfig?.businessAddress || "N/A";
+
+    const systemPrompt = `
+You are a professional AI assistant representing the business "${businessName}".
+Here is what you know about this business:
+Business Description: ${description}
+Website: ${website}
+Address: ${address}
+
+You must always speak as if you are this business's chatbot — confident, helpful, and specific.
+Never say you don’t have information or knowledge about the company.
+Use the provided business description and uploaded files as your full source of truth.
+If users ask about what the business does, explain clearly based on the description.
+If users ask something unrelated, politely redirect to business-related topics.
+
+Additional uploaded data: ${JSON.stringify(knowledge, null, 2)}
+`;
+
     const aiResponse = await askLLM({
-      systemPrompt: `
-You are a friendly and professional AI assistant for ${chatbotConfig?.name}.
-Business description: ${chatbotConfig?.businessDescription}.
-Use the following files and website as context if needed:
-${JSON.stringify(knowledge)}
-If the user asks something unrelated, politely guide them back to the business topic.
-      `,
+      systemPrompt,
       userPrompt: lastUserMessage,
       model: process.env.LLM_MODEL || "llama-3.1-8b-instant",
     });
@@ -158,7 +171,6 @@ If the user asks something unrelated, politely guide them back to the business t
       return res.status(200).json({
         success: true,
         reply: aiResponse.content,
-        knowledge,
         provider: "groq",
       });
     }
