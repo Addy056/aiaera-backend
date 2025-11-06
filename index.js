@@ -1,4 +1,4 @@
-// server.js
+// index.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -80,7 +80,7 @@ app.get("/", (req, res) => {
 });
 
 // ----------------------
-// Mount API routes
+// Core API routes
 // ----------------------
 app.use("/api", apiRouter);
 app.use("/api/auth", authRouter);
@@ -98,9 +98,11 @@ app.use("/api/integrations", integrationsRouter);
 app.use("/api/chatbot/public", chatbotRouter);
 app.use("/api/chatbot", requireAuth, chatbotRouter);
 
-// ✅ Try loading chatbotPreview route safely
+// ✅ Chatbot Preview route (for Builder preview)
 try {
-  const { default: chatbotPreview } = await import("./routes/chatbotPreview.js");
+  const chatbotPreview = await import("./routes/chatbotPreview.js").then(
+    (m) => m.default
+  );
   app.use("/api/chatbot-preview", chatbotPreview);
   console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
 } catch (err) {
