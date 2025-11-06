@@ -20,6 +20,7 @@ import paymentRouter from "./routes/paymentRoutes.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
+import chatbotPreviewRouter from "./routes/chatbotPreview.js"; // ✅ proper static import
 import { requireAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -99,15 +100,8 @@ app.use("/api/chatbot/public", chatbotRouter);
 app.use("/api/chatbot", requireAuth, chatbotRouter);
 
 // ✅ Chatbot Preview route (for Builder preview)
-try {
-  const chatbotPreview = await import("./routes/chatbotPreview.js").then(
-    (m) => m.default
-  );
-  app.use("/api/chatbot-preview", chatbotPreview);
-  console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
-} catch (err) {
-  console.error("❌ Failed to load chatbotPreview route:", err.message);
-}
+app.use("/api/chatbot-preview", chatbotPreviewRouter);
+console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
 
 // ----------------------
 // Embed routes
@@ -143,6 +137,7 @@ app.use(errorHandler);
 // Start server
 // ----------------------
 app.listen(PORT, () => {
+  console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
   console.log(`🚀 AIAERA backend running on port ${PORT}`);
 });
 
