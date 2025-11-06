@@ -1,3 +1,4 @@
+// server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -18,32 +19,33 @@ import paymentWebhookRouter from "./routes/paymentWebhook.js";
 import paymentRouter from "./routes/paymentRoutes.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
-import chatbotRouter from "./routes/chatbot.js"; // ✅ single clean import
-import { requireAuth } from "./middleware/authMiddleware.js"; // ✅ imported directly
+import chatbotRouter from "./routes/chatbot.js";
+import chatbotPreview from "./routes/chatbotPreview.js"; // ✅ added
+import { requireAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ----------------------
-// Trust proxy (needed for Render, cookies, secure sessions)
+// Trust proxy (needed for Render)
 // ----------------------
 app.set("trust proxy", 1);
 
 // ----------------------
-// Security & Performance Middlewares
+// Security & Performance
 // ----------------------
 app.use(
   helmet({
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false, // disabled for iframe embeds
-    frameguard: false, // disable X-Frame-Options globally
+    contentSecurityPolicy: false,
+    frameguard: false,
   })
 );
 app.use(compression());
 
 // ----------------------
-// CORS (allow all origins for simplicity)
+// CORS
 // ----------------------
 app.use(
   cors({
@@ -54,32 +56,32 @@ app.use(
 );
 
 // ----------------------
-// Razorpay webhook requires raw body
+// Razorpay webhook (raw body)
 // ----------------------
 app.use("/api/payment-webhook", express.raw({ type: "*/*" }));
 
 // ----------------------
-// Parse JSON & URL-encoded
+// JSON & URL-encoded
 // ----------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ----------------------
-// Logging
+// Logging (only in dev)
 // ----------------------
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 }
 
 // ----------------------
-// Health check endpoint
+// Health check
 // ----------------------
 app.get("/", (req, res) => {
   res.json({ status: "✅ AIAERA backend is running!" });
 });
 
 // ----------------------
-// Mount API Routes
+// Mount API routes
 // ----------------------
 app.use("/api", apiRouter);
 app.use("/api/auth", authRouter);
@@ -92,17 +94,16 @@ app.use("/api/payment", paymentRouter);
 app.use("/api/integrations", integrationsRouter);
 
 // ----------------------
-// Chatbot Routes
+// Chatbot routes
 // ----------------------
-
-// ✅ Public (unauthenticated) chatbot routes for website embeds
 app.use("/api/chatbot/public", chatbotRouter);
-
-// ✅ Authenticated chatbot routes (used inside app dashboard/builder)
 app.use("/api/chatbot", requireAuth, chatbotRouter);
 
+// ✅ Chatbot Preview route (for Builder preview)
+app.use("/api/chatbot-preview", chatbotPreview);
+
 // ----------------------
-// Embed routes: fully iframe-friendly
+// Embed routes
 // ----------------------
 app.use(
   "/api/embed",
@@ -117,7 +118,7 @@ app.use(
 );
 
 // ----------------------
-// 404 for unmatched routes
+// 404 handler
 // ----------------------
 app.use((req, res) => {
   res.status(404).json({
