@@ -151,7 +151,7 @@ ${JSON.stringify(knowledge)}
 If the user asks something unrelated, politely guide them back to the business topic.
       `,
       userPrompt: lastUserMessage,
-      model: process.env.LLM_MODEL || "gemma2-9b-it",
+      model: process.env.LLM_MODEL || "llama-3.1-8b-instant",
     });
 
     if (aiResponse?.ok && aiResponse?.content) {
