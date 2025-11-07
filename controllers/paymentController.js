@@ -3,7 +3,7 @@ import crypto from "crypto";
 import razorpay from "../config/razorpayConfig.js";
 import supabase from "../config/supabaseClient.js";
 
-// 🟣 Define subscription plans
+// 🟣 Subscription Plans
 const PLANS = {
   free: { amount: 0, duration: 0 },     // 24h trial
   basic: { amount: 999, duration: 1 },  // 1 month
@@ -11,37 +11,41 @@ const PLANS = {
 };
 
 /**
- * Create Razorpay order or activate free plan
+ * ----------------------------------------------------------
+ * Create Razorpay Order or Activate Free Trial
+ * ----------------------------------------------------------
  */
 export const createOrder = async (req, res) => {
   try {
     const { plan, user_id } = req.body;
+    console.log(`🟢 [CreateOrder] Incoming request → Plan: ${plan}, User: ${user_id}`);
 
     // ✅ Validate inputs
     if (!plan || !PLANS[plan]) {
+      console.warn("⚠️ Invalid or missing plan:", plan);
       return res.status(400).json({ success: false, error: "Invalid plan selected" });
     }
     if (!user_id) {
+      console.warn("⚠️ Missing user_id in request body");
       return res.status(400).json({ success: false, error: "User ID is required" });
     }
 
     const { amount } = PLANS[plan];
 
-    // 🔹 Free plan (24h trial)
+    // 🔹 Free Trial Activation
     if (amount === 0) {
+      console.log("🆓 Activating free trial for user:", user_id);
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       const { error } = await supabase
         .from("user_subscriptions")
         .upsert(
-          [
-            {
-              user_id,
-              plan: "free",
-              expires_at: expiresAt.toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ],
+          [{
+            user_id,
+            plan: "free",
+            expires_at: expiresAt.toISOString(),
+            updated_at: new Date().toISOString(),
+          }],
           { onConflict: "user_id" }
         );
 
@@ -50,59 +54,73 @@ export const createOrder = async (req, res) => {
         return res.status(500).json({ success: false, error: "Failed to activate free trial" });
       }
 
-      console.log(`🎉 Free trial activated for user ${user_id}`);
+      console.log(`🎉 Free trial activated successfully for user ${user_id} until ${expiresAt}`);
       return res.json({ success: true, message: "Free plan activated", expiresAt });
     }
 
-    // 🔹 Paid plan → Create Razorpay order
+    // 🔹 Paid Plan → Razorpay order
     if (!razorpay) {
       console.error("❌ Razorpay client not configured");
       return res.status(500).json({ success: false, error: "Payment gateway not configured" });
     }
 
-    // ✅ Ensure receipt ID is always <= 40 chars
-    const shortUserId = user_id.toString().slice(0, 8); // keep it short
-    const uniquePart = Date.now().toString().slice(-8); // last 8 digits of timestamp
-    const receiptId = `rcpt_${shortUserId}_${uniquePart}`; // always < 40 chars
+    const shortUserId = user_id.toString().slice(0, 8);
+    const uniquePart = Date.now().toString().slice(-8);
+    const receiptId = `rcpt_${shortUserId}_${uniquePart}`; // <40 chars
 
     const options = {
-      amount: amount * 100, // in paise
+      amount: amount * 100,
       currency: "INR",
       receipt: receiptId,
       payment_capture: 1,
     };
 
+    console.log("🪙 [Razorpay] Creating order →", options);
+
     const order = await razorpay.orders.create(options);
+
     if (!order || !order.id) {
       console.error("❌ Razorpay order creation failed:", order);
       return res.status(500).json({ success: false, error: "Failed to create Razorpay order" });
     }
 
-    console.log(`✅ Razorpay order created: ${order.id} for user ${user_id}`);
+    console.log(`✅ [Razorpay] Order created successfully: ${order.id} for user ${user_id}`);
     res.json({ success: true, order });
   } catch (err) {
-    console.error("❌ Error in createOrder:", err);
+    console.error("❌ [createOrder] Error:", err);
     res.status(500).json({ success: false, error: err?.message || "Failed to create order" });
   }
 };
 
 /**
- * Verify Razorpay Payment and save subscription
+ * ----------------------------------------------------------
+ * Verify Razorpay Payment & Update Subscription
+ * ----------------------------------------------------------
  */
 export const verifyPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan, user_id } = req.body;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      plan,
+      user_id,
+    } = req.body;
 
+    console.log("🟢 [VerifyPayment] Verifying payment for user:", user_id);
+
+    // ✅ Validate all inputs
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !plan || !user_id) {
+      console.warn("⚠️ Missing required payment details in verifyPayment");
       return res.status(400).json({ success: false, error: "Missing payment details" });
     }
 
     if (!process.env.RAZORPAY_KEY_SECRET) {
-      console.error("❌ RAZORPAY_KEY_SECRET is not configured");
+      console.error("❌ RAZORPAY_KEY_SECRET not configured");
       return res.status(500).json({ success: false, error: "Payment verification misconfigured" });
     }
 
-    // 🔹 Verify Razorpay signature
+    // 🔹 Verify Signature
     const generated_signature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -113,34 +131,36 @@ export const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid payment signature" });
     }
 
-    // 🔹 Calculate subscription expiry
+    console.log(`✅ [Razorpay] Signature verified for order ${razorpay_order_id}`);
+
+    // 🔹 Calculate Expiry
     const durationMonths = PLANS[plan]?.duration || 1;
     const expiresAt = new Date();
     expiresAt.setMonth(expiresAt.getMonth() + durationMonths);
 
-    // 🔹 Save subscription in Supabase
+    console.log(`📆 Subscription valid until: ${expiresAt.toISOString()}`);
+
+    // 🔹 Update Supabase
     const { error } = await supabase
       .from("user_subscriptions")
       .upsert(
-        [
-          {
-            user_id,
-            plan,
-            expires_at: expiresAt.toISOString(),
-            razorpay_order_id,
-            razorpay_payment_id,
-            updated_at: new Date().toISOString(),
-          },
-        ],
+        [{
+          user_id,
+          plan,
+          expires_at: expiresAt.toISOString(),
+          razorpay_order_id,
+          razorpay_payment_id,
+          updated_at: new Date().toISOString(),
+        }],
         { onConflict: "user_id" }
       );
 
     if (error) {
-      console.error("❌ Supabase error (verifyPayment):", error);
+      console.error("❌ Supabase update error (verifyPayment):", error);
       return res.status(500).json({ success: false, error: "Failed to update subscription" });
     }
 
-    console.log(`✅ Payment verified & subscription updated for user ${user_id} (Plan: ${plan})`);
+    console.log(`🎯 Payment verified & subscription updated for user ${user_id} (Plan: ${plan})`);
     res.json({
       success: true,
       message: "Payment verified & subscription active",
@@ -148,7 +168,10 @@ export const verifyPayment = async (req, res) => {
       expiresAt,
     });
   } catch (err) {
-    console.error("❌ Error in verifyPayment:", err);
-    res.status(500).json({ success: false, error: err?.message || "Payment verification failed" });
+    console.error("❌ [verifyPayment] Exception:", err);
+    res.status(500).json({
+      success: false,
+      error: err?.message || "Payment verification failed",
+    });
   }
 };
