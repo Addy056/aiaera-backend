@@ -21,36 +21,33 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     if (allowedTypes.includes(file.mimetype)) cb(null, true);
-    else
-      cb(
-        new Error(
-          "Unsupported file type. Allowed: PDF, CSV, XLS/XLSX, TXT"
-        )
-      );
+    else cb(new Error("Unsupported file type. Allowed: PDF, CSV, XLS/XLSX, TXT"));
   },
 });
 
 export const uploadMiddleware = upload.single("file");
 
 // ----------------------
-// Upload a file
+// Upload a file → Supabase + extract content
 // ----------------------
 export const uploadFile = async (req, res) => {
   try {
-    const user = req.user;
+    // ✅ Determine user
+    const userId = req.user?.id || req.body.userId;
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
     const { originalname, buffer, mimetype, size } = req.file;
     const chatbot_id = req.body.chatbot_id || null;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || "chatbot-files";
 
-    // Generate unique filename
+    // ✅ Generate unique filename
     const random = crypto.randomBytes(8).toString("hex");
     const fileExt = originalname.split(".").pop();
     const filename = `${Date.now()}_${random}.${fileExt}`;
-    const path = `${user.id}/${filename}`;
+    const path = `${userId}/${filename}`;
 
-    // Upload to Supabase Storage
+    // ✅ Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(path, buffer, {
@@ -61,17 +58,17 @@ export const uploadFile = async (req, res) => {
 
     if (uploadError) {
       console.error("[Uploads] Storage upload error:", uploadError);
-      return res
-        .status(500)
-        .json({ error: uploadError.message || "Storage upload failed" });
+      return res.status(500).json({
+        error: uploadError.message || "Storage upload failed",
+      });
     }
 
-    // Insert file metadata
+    // ✅ Insert file metadata
     const { data: metaData, error: metaError } = await supabase
       .from("chatbot_files")
       .insert([
         {
-          user_id: user.id,
+          user_id: userId,
           chatbot_id,
           bucket,
           path,
@@ -85,8 +82,8 @@ export const uploadFile = async (req, res) => {
 
     if (metaError) console.warn("[Uploads] Failed to save metadata:", metaError);
 
-    // Extract content for searchable data
-    let extractedContent = null;
+    // ✅ Extract content (PDF / CSV / Excel / TXT)
+    let extractedContent = "";
     let contentType = "";
 
     if (mimetype === "application/pdf") {
@@ -94,28 +91,27 @@ export const uploadFile = async (req, res) => {
       contentType = "pdf";
     } else if (mimetype === "text/csv" || mimetype.includes("excel")) {
       extractedContent = await parseExcelBuffer(buffer);
-      contentType = "excel";
+      contentType = "spreadsheet";
     } else if (mimetype === "text/plain") {
       extractedContent = buffer.toString("utf-8");
       contentType = "text";
     }
 
-    // Normalize extracted content (stringify objects for consistent storage)
+    // ✅ Normalize extracted content
     const normalizedContent =
       extractedContent && typeof extractedContent === "object"
         ? JSON.stringify(extractedContent)
         : extractedContent;
 
-    // Save extracted content for chatbot search
+    // ✅ Store extracted text into chatbot_file_data (JSON)
     if (metaData?.id && normalizedContent) {
       const { error: contentError } = await supabase
         .from("chatbot_file_data")
         .insert([
           {
             file_id: metaData.id,
-            user_id: user.id,
-            type: contentType,
-            content: normalizedContent,
+            chatbot_id: chatbot_id || null,
+            content: { text: normalizedContent },
           },
         ]);
 
@@ -123,12 +119,13 @@ export const uploadFile = async (req, res) => {
         console.error("[Uploads] Failed to save extracted content:", contentError);
     }
 
+    // ✅ Return response
     return res.status(201).json({
       success: true,
-      message: "File uploaded and parsed",
+      message: "✅ File uploaded and processed successfully",
       storage: uploadData,
       metadata: metaData || null,
-      extractedContent, // optional for immediate preview
+      extractedContent, // optional for preview
     });
   } catch (err) {
     console.error("[Uploads] Upload error:", err);
@@ -141,7 +138,9 @@ export const uploadFile = async (req, res) => {
 // ----------------------
 export const listFiles = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || req.query.userId;
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
+
     const { data, error } = await supabase
       .from("chatbot_files")
       .select("*")
@@ -149,7 +148,6 @@ export const listFiles = async (req, res) => {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     res.json({ success: true, files: data });
   } catch (err) {
     console.error("[Uploads] List files error:", err);
@@ -162,7 +160,7 @@ export const listFiles = async (req, res) => {
 // ----------------------
 export const getDownloadUrl = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || req.query.userId;
     const { id } = req.params;
 
     const { data: fileRow, error: fetchError } = await supabase
@@ -180,7 +178,6 @@ export const getDownloadUrl = async (req, res) => {
       .createSignedUrl(fileRow.path, 3600);
 
     if (signedUrlError) throw signedUrlError;
-
     res.json({ success: true, url: signedUrlData.signedUrl });
   } catch (err) {
     console.error("[Uploads] Get download URL error:", err);
@@ -193,7 +190,7 @@ export const getDownloadUrl = async (req, res) => {
 // ----------------------
 export const deleteFile = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id || req.query.userId;
     const { id } = req.params;
 
     const { data: fileRow, error: fetchError } = await supabase
@@ -206,7 +203,7 @@ export const deleteFile = async (req, res) => {
     if (fetchError || !fileRow)
       return res.status(404).json({ error: "File not found" });
 
-    // Remove from storage
+    // ✅ Remove from Supabase Storage
     const { error: removeError } = await supabase.storage
       .from(fileRow.bucket)
       .remove([fileRow.path]);
@@ -216,25 +213,13 @@ export const deleteFile = async (req, res) => {
       return res.status(500).json({ error: "Failed to delete file from storage" });
     }
 
-    // Delete metadata
-    const { error: deleteMetaError } = await supabase
-      .from("chatbot_files")
-      .delete()
-      .eq("id", id);
+    // ✅ Delete metadata
+    await supabase.from("chatbot_files").delete().eq("id", id);
 
-    if (deleteMetaError)
-      console.warn("[Uploads] Failed to delete metadata:", deleteMetaError);
+    // ✅ Delete related extracted content
+    await supabase.from("chatbot_file_data").delete().eq("file_id", id);
 
-    // Delete associated chatbot_file_data
-    const { error: deleteDataError } = await supabase
-      .from("chatbot_file_data")
-      .delete()
-      .eq("file_id", id);
-
-    if (deleteDataError)
-      console.warn("[Uploads] Failed to delete chatbot_file_data:", deleteDataError);
-
-    res.json({ success: true, message: "File deleted" });
+    res.json({ success: true, message: "✅ File deleted successfully" });
   } catch (err) {
     console.error("[Uploads] Delete file error:", err);
     res.status(500).json({ error: "Failed to delete file" });

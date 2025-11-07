@@ -5,39 +5,67 @@ import { getChatbotPreviewReply } from "../controllers/chatbotPreviewController.
 const router = express.Router();
 
 /**
- * ✅ Health Check Endpoint
- * Helps confirm the route is live on Render.
- * Example: https://aiaera-backend.onrender.com/api/chatbot-preview
+ * ✅ GET /api/chatbot-preview
+ * Health check endpoint (for Render uptime or manual verification)
  */
 router.get("/", (req, res) => {
   res.status(200).json({
     success: true,
     route: "/api/chatbot-preview",
-    message: "✅ Chatbot preview endpoint is active. Send a POST request for chatbot replies.",
+    message:
+      "✅ Chatbot preview endpoint is active. Use POST /api/chatbot-preview for chatbot replies.",
   });
 });
 
 /**
- * Helper: Async route wrapper (for cleaner error handling)
+ * Helper: Async route wrapper (to catch async errors cleanly)
  */
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
  * ✅ POST /api/chatbot-preview
- * Used by the Builder’s live chatbot preview
- * Public (no authentication) to simplify testing
+ * Main route used by the frontend builder preview.
+ * Accepts:
+ *   - messages[] (conversation so far)
+ *   - userId (Supabase auth.user.id)
+ * Optional:
+ *   - chatbotConfig (temporary, for non-persistent previews)
+ *
+ * Returns: { success, reply, provider }
  */
-router.post("/", asyncHandler(getChatbotPreviewReply));
+router.post("/", asyncHandler(async (req, res, next) => {
+  const { messages, userId } = req.body || {};
+
+  // Basic validation
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid request: 'messages' array is required.",
+    });
+  }
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid request: 'userId' is required.",
+    });
+  }
+
+  console.log(`💬 [ChatbotPreview] Incoming message from user ${userId}`);
+
+  // Delegate to controller
+  return getChatbotPreviewReply(req, res, next);
+}));
 
 /**
- * ⚠️ Catch-all for undefined subroutes
- * Helps debug route mismatches (prevents "Route not found")
+ * ⚠️ Catch-all for invalid subroutes
+ * Prevents confusion when testing URLs manually
  */
 router.all("*", (req, res) => {
   res.status(404).json({
     success: false,
-    error: `Invalid route. Try POST /api/chatbot-preview instead of "${req.originalUrl}".`,
+    error: `❌ Invalid route "${req.originalUrl}". Try POST /api/chatbot-preview.`,
   });
 });
 

@@ -1,4 +1,4 @@
-// index.js
+// backend/index.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -20,7 +20,13 @@ import paymentRouter from "./routes/paymentRoutes.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
-import chatbotPreviewRouter from "./routes/chatbotPreview.js"; // ✅ proper static import
+import chatbotPreviewRouter from "./routes/chatbotPreview.js";
+import chatbotSaveRouter from "./routes/chatbotSave.js";
+import cleanupContextRouter from "./routes/cleanupContext.js"; // ✅ NEW: Chat context cleanup route
+
+// ----------------------
+// Middleware
+// ----------------------
 import { requireAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -28,7 +34,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ----------------------
-// Trust proxy (Render)
+// Trust proxy (for Render)
 // ----------------------
 app.set("trust proxy", 1);
 
@@ -45,7 +51,7 @@ app.use(
 app.use(compression());
 
 // ----------------------
-// CORS
+// CORS Configuration
 // ----------------------
 app.use(
   cors({
@@ -56,28 +62,32 @@ app.use(
 );
 
 // ----------------------
-// Razorpay webhook (raw body)
+// Razorpay Webhook (raw body parsing)
 // ----------------------
 app.use("/api/payment-webhook", express.raw({ type: "*/*" }));
 
 // ----------------------
-// JSON & URL-encoded
+// JSON & URL-encoded body parsing
 // ----------------------
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // ----------------------
-// Logging (only in dev)
+// Logging (only in dev mode)
 // ----------------------
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 }
 
 // ----------------------
-// Health check
+// Health check route
 // ----------------------
 app.get("/", (req, res) => {
-  res.json({ status: "✅ AIAERA backend is running!" });
+  res.json({
+    status: "✅ AIAERA backend is running!",
+    version: "1.0.0",
+    environment: process.env.NODE_ENV || "development",
+  });
 });
 
 // ----------------------
@@ -96,12 +106,23 @@ app.use("/api/integrations", integrationsRouter);
 // ----------------------
 // Chatbot routes
 // ----------------------
-app.use("/api/chatbot/public", chatbotRouter);
-app.use("/api/chatbot", requireAuth, chatbotRouter);
 
-// ✅ Chatbot Preview route (for Builder preview)
+// ✅ Public builder save/update
+app.use("/api/chatbot", chatbotSaveRouter);
+
+// ✅ Public chatbot (embed/live chat)
+app.use("/api/chatbot/public", chatbotRouter);
+
+// ✅ Secure chatbot (authenticated users)
+app.use("/api/chatbot/secure", requireAuth, chatbotRouter);
+
+// ✅ Live preview route for Builder
 app.use("/api/chatbot-preview", chatbotPreviewRouter);
 console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
+
+// ✅ Cleanup route (removes old chat contexts)
+app.use("/api/cleanup-context", cleanupContextRouter);
+console.log("🧹 Cleanup route mounted at /api/cleanup-context");
 
 // ----------------------
 // Embed routes
@@ -125,6 +146,7 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     error: "Route not found",
+    path: req.originalUrl,
   });
 });
 
@@ -134,11 +156,13 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ----------------------
-// Start server
+// Start Server
 // ----------------------
 app.listen(PORT, () => {
+  console.log("🚀 AIAERA backend running on port", PORT);
   console.log("✅ Chatbot preview route mounted at /api/chatbot-preview");
-  console.log(`🚀 AIAERA backend running on port ${PORT}`);
+  console.log("✅ Chatbot save route mounted at /api/chatbot");
+  console.log("🧹 Cleanup route available at /api/cleanup-context");
 });
 
 export default app;

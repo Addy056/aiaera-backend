@@ -41,152 +41,146 @@ async function getFileContentFromSupabase(fileUrl) {
 }
 
 // --------------------
-// Controller
+// Helper: Save or Update User Context
+// --------------------
+async function saveChatContext(userId, sessionId, newContext, lastMessage) {
+  try {
+    const { data: existing } = await supabase
+      .from("user_chat_context")
+      .select("id, context")
+      .eq("user_id", userId)
+      .eq("session_id", sessionId)
+      .maybeSingle();
+
+    if (existing) {
+      const updatedContext = { ...existing.context, ...newContext };
+      await supabase
+        .from("user_chat_context")
+        .update({ context: updatedContext, last_message: lastMessage, updated_at: new Date() })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("user_chat_context").insert([
+        { user_id: userId, session_id: sessionId, context: newContext, last_message: lastMessage },
+      ]);
+    }
+  } catch (err) {
+    console.error("[ChatContext] Save error:", err.message);
+  }
+}
+
+// --------------------
+// Helper: Load User Context
+// --------------------
+async function loadChatContext(userId, sessionId) {
+  const { data } = await supabase
+    .from("user_chat_context")
+    .select("context")
+    .eq("user_id", userId)
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  return data?.context || {};
+}
+
+// --------------------
+// Main Controller
 // --------------------
 export const getChatbotPreviewReply = async (req, res) => {
   try {
-    const { messages = [], userId } = req.body || {};
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ success: false, error: "Messages array is required." });
-    }
+    const { messages = [], userId, sessionId } = req.body || {};
+    if (!userId) return res.status(400).json({ success: false, error: "User ID is required." });
+    if (!Array.isArray(messages) || messages.length === 0)
+      return res.status(400).json({ success: false, error: "Messages array required." });
 
-    const lastUserMessage = messages[messages.length - 1]?.content?.toString()?.trim() || "Hi";
+    const lastUserMessage = messages[messages.length - 1]?.content?.trim() || "Hi";
 
-    if (!userId) {
-      return res.status(400).json({ success: false, error: "User ID is required for chatbot preview." });
-    }
+    // 1️⃣ Load existing context (location, budget, etc.)
+    const userContext = await loadChatContext(userId, sessionId || "default");
 
-    // -------------------- Fetch chatbot configuration --------------------
-    const { data: chatbotConfig, error: cfgError } = await supabase
-      .from("chatbot_configs")
-      .select("*")
+    // 2️⃣ Detect & update context
+    const newContext = {};
+    const lowerMsg = lastUserMessage.toLowerCase();
+
+    const locationMatch = lowerMsg.match(/in\s+([a-zA-Z\s]+)/);
+    const budgetMatch = lowerMsg.match(/under\s*₹?(\d+)\s*l/i);
+    const bhkMatch = lowerMsg.match(/(\d+)\s*bhk/i);
+
+    if (locationMatch) newContext.location = locationMatch[1].trim();
+    if (budgetMatch) newContext.budget = `${budgetMatch[1]}L`;
+    if (bhkMatch) newContext.rooms = `${bhkMatch[1]} BHK`;
+
+    // Save context changes
+    await saveChatContext(userId, sessionId || "default", newContext, lastUserMessage);
+
+    // Merge with previous context
+    const combinedContext = { ...userContext, ...newContext };
+
+    // 3️⃣ Fetch chatbot data
+    const { data: businessData } = await supabase
+      .from("business_data")
+      .select("title, description")
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (cfgError) {
-      console.error("[ChatbotPreview] Supabase config fetch error:", cfgError.message);
-      return res.status(500).json({ success: false, error: "Failed to fetch chatbot config." });
-    }
-
-    if (!chatbotConfig) {
-      return res.status(200).json({
-        success: true,
-        reply: "🤖 This is a chatbot preview — no configuration found for this user.",
-      });
-    }
-
-    // -------------------- Extract config details --------------------
-    const businessName = chatbotConfig?.name || "this business";
-    const description = chatbotConfig?.businessDescription || "No description provided.";
-    const website = chatbotConfig?.websiteUrl || "N/A";
-    const address = chatbotConfig?.businessAddress || "N/A";
-    const files = chatbotConfig?.files || [];
-
-    // -------------------- Fetch Calendly link --------------------
-    let calendlyLink = null;
     const { data: integrations } = await supabase
       .from("user_integrations")
-      .select("calendly_link")
+      .select("calendly_link, business_address")
       .eq("user_id", userId)
       .maybeSingle();
-    calendlyLink = integrations?.calendly_link || null;
 
-    // -------------------- Handle Intent: Book Meeting --------------------
-    const lowerMsg = lastUserMessage.toLowerCase();
-    if (["book", "meeting", "appointment", "schedule", "demo"].some((kw) => lowerMsg.includes(kw))) {
-      if (calendlyLink) {
-        return res.status(200).json({
-          success: true,
-          reply: `📅 You can book a meeting here: ${calendlyLink}`,
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        reply: "I don’t have a booking link yet. Please add your Calendly link in Integrations.",
-      });
-    }
+    const { data: chatbot } = await supabase
+      .from("chatbots")
+      .select("id, name")
+      .eq("user_id", userId)
+      .maybeSingle();
 
-    // -------------------- Handle Intent: Address --------------------
-    if (["address", "location", "where"].some((kw) => lowerMsg.includes(kw))) {
-      if (address && address !== "N/A") {
-        return res.status(200).json({
-          success: true,
-          reply: `📍 Our business address is: ${address}`,
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        reply: "No address provided yet for this business.",
-      });
-    }
+    const { data: files } = await supabase
+      .from("chatbot_files")
+      .select("filename, path, bucket")
+      .eq("chatbot_id", chatbot?.id || null);
 
-    // -------------------- Handle Intent: Website --------------------
-    if (["website", "site", "link"].some((kw) => lowerMsg.includes(kw))) {
-      if (website && website !== "N/A") {
-        return res.status(200).json({
-          success: true,
-          reply: `🌐 You can visit our website here: ${website}`,
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        reply: "This business doesn’t have a website linked yet.",
-      });
-    }
-
-    // -------------------- Include Uploaded Files --------------------
+    // 4️⃣ Load files into context
     const knowledge = [];
-    for (const file of files) {
-      const text = await getFileContentFromSupabase(file.publicUrl);
-      knowledge.push({ name: file.name, content: text });
+    if (files?.length) {
+      for (const file of files) {
+        const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/${file.bucket}/${file.path}`;
+        const text = await getFileContentFromSupabase(publicUrl);
+        knowledge.push({ name: file.filename, content: text });
+      }
     }
 
-    // -------------------- AI System Prompt --------------------
+    // 5️⃣ Create smart system prompt
     const systemPrompt = `
-You are an intelligent AI assistant representing the business "${businessName}".
+You are a smart AI assistant for ${businessData?.title || "this business"}.
 
-Official Business Details:
----
-Description: ${description}
-Website: ${website}
-Address: ${address}
----
+User context: ${JSON.stringify(combinedContext)}
+Business description: ${businessData?.description || "No description"}
+Address: ${integrations?.business_address || "N/A"}
+Calendly: ${integrations?.calendly_link || "N/A"}
 
-Uploaded Knowledge Files:
-${JSON.stringify(knowledge, null, 2)}
+Uploaded Files: ${JSON.stringify(knowledge.map(f => f.name))}
 
-Rules:
-- Always act as the business representative.
-- Never say you don’t know about the business — use the info above confidently.
-- Answer based ONLY on the provided business info and uploaded data.
-- Be conversational, professional, and brief.
+If user asks similar queries as before, refer to their saved context.
+Always be polite, helpful, and proactive.
+
+If filters exist (location, budget, rooms), use them in your responses:
+e.g., "Here are some ${combinedContext.rooms || ""} options in ${combinedContext.location || "your area"} under ${combinedContext.budget || "your budget"}."
 `;
 
-    // -------------------- Ask Groq AI --------------------
+    // 6️⃣ Get AI response
     const aiResponse = await askLLM({
       systemPrompt,
       userPrompt: lastUserMessage,
-      model: process.env.LLM_MODEL || "llama-3.1-8b-instant",
+      userId,
+      chatbotId: chatbot?.id,
     });
 
-    if (aiResponse?.ok && aiResponse?.content) {
-      return res.status(200).json({
-        success: true,
-        reply: aiResponse.content,
-        provider: "groq",
-      });
-    }
-
-    // -------------------- Fallback --------------------
     return res.status(200).json({
       success: true,
-      reply: "🤖 Sorry, I couldn’t find an answer for that right now.",
+      reply: aiResponse?.content || "🤖 Sorry, I couldn’t find an answer for that right now.",
+      context: combinedContext,
     });
   } catch (err) {
-    console.error("[ChatbotPreview] Unexpected error:", err.message);
-    return res.status(500).json({
-      success: false,
-      error: "Internal server error in chatbot preview.",
-    });
+    console.error("[ChatbotPreview] Error:", err.message);
+    return res.status(500).json({ success: false, error: "Internal error in chatbot preview." });
   }
 };
