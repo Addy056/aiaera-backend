@@ -16,7 +16,7 @@ import leadsRouter from "./routes/leads.js";
 import appointmentsRouter from "./routes/appointments.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
 import paymentWebhookRouter from "./routes/paymentWebhook.js";
-import paymentRouter from "./routes/paymentRoutes.js";
+import paymentRouter from "./routes/payment.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
