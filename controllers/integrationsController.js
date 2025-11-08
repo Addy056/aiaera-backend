@@ -1,11 +1,9 @@
 import axios from "axios";
 import supabase from "../config/supabaseClient.js";
 
-/**
- * ------------------------------------------------------
+/* ------------------------------------------------------
  * 1) META WEBHOOK VERIFICATION
- * ------------------------------------------------------
- */
+ * ------------------------------------------------------ */
 export const verifyMetaWebhook = (req, res) => {
   try {
     const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN;
@@ -14,20 +12,19 @@ export const verifyMetaWebhook = (req, res) => {
     const challenge = req.query["hub.challenge"];
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ Meta webhook verified");
       return res.status(200).send(challenge);
     }
     return res.sendStatus(403);
   } catch (err) {
-    console.error("Meta webhook verification error:", err.message);
+    console.error("❌ Meta webhook verification error:", err.message);
     return res.sendStatus(500);
   }
 };
 
-/**
- * ------------------------------------------------------
+/* ------------------------------------------------------
  * 2) HANDLE META (WA/FB/IG) MESSAGES
- * ------------------------------------------------------
- */
+ * ------------------------------------------------------ */
 export const handleMetaWebhook = async (req, res, next) => {
   try {
     const entry = req.body?.entry?.[0];
@@ -48,7 +45,7 @@ export const handleMetaWebhook = async (req, res, next) => {
     const phoneNumberId = value?.metadata?.phone_number_id;
     if (!phoneNumberId) return res.sendStatus(200);
 
-    // Find integration by WhatsApp number id
+    // 🔍 Lookup by WhatsApp number id
     const { data: integration, error: fetchError } = await supabase
       .from("user_integrations")
       .select("*")
@@ -57,7 +54,6 @@ export const handleMetaWebhook = async (req, res, next) => {
 
     if (fetchError || !integration) return res.sendStatus(200);
 
-    // Quick auto-reply
     const safeText = (text || "").toLowerCase();
     const wantsAppointment = ["book", "schedule", "appointment", "meeting", "call", "demo", "consultation"]
       .some((k) => safeText.includes(k));
@@ -90,22 +86,20 @@ export const handleMetaWebhook = async (req, res, next) => {
       { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
 
+    console.log(`✅ Auto-replied to ${from}`);
     return res.sendStatus(200);
   } catch (err) {
-    console.error("handleMetaWebhook error:", err);
+    console.error("❌ handleMetaWebhook error:", err);
     return next(err);
   }
 };
 
-/**
- * ------------------------------------------------------
+/* ------------------------------------------------------
  * 3) CALENDLY WEBHOOK (NEW APPOINTMENTS)
- * ------------------------------------------------------
- */
+ * ------------------------------------------------------ */
 export const handleCalendlyWebhook = async (req, res, next) => {
   try {
     const event = req.body;
-
     if (event?.event === "invitee.created") {
       const invitee = event.payload?.invitee;
       const eventLink = event.payload?.event?.uri;
@@ -135,33 +129,25 @@ export const handleCalendlyWebhook = async (req, res, next) => {
             calendly_event_link: eventLink || bookingLink || null,
           },
         ]);
-        console.log(`Appointment saved for ${name}`);
+        console.log(`✅ Appointment saved for ${name}`);
       }
     }
-
     return res.sendStatus(200);
   } catch (err) {
-    console.error("handleCalendlyWebhook error:", err);
+    console.error("❌ handleCalendlyWebhook error:", err);
     return next(err);
   }
 };
 
-/**
- * ------------------------------------------------------
+/* ------------------------------------------------------
  * 4) SAVE INTEGRATIONS (UPSERT)
- * ------------------------------------------------------
- */
+ * ------------------------------------------------------ */
 export const saveIntegrations = async (req, res) => {
   try {
-    const { user_id, ...integrationData } = req.body;
+    let { user_id, ...integrationData } = req.body;
+    if (!user_id) return res.status(400).json({ success: false, error: "Missing user_id" });
+    user_id = String(user_id).replace(/[<>]/g, "").trim();
 
-    // Strict UUID validation (v1-5)
-    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-    if (!user_id || !uuidRegex.test(user_id)) {
-      return res.status(400).json({ success: false, error: "Invalid or missing user_id" });
-    }
-
-    // Only allow known columns that exist in DB
     const allowed = [
       "whatsapp_number",
       "whatsapp_token",
@@ -178,15 +164,14 @@ export const saveIntegrations = async (req, res) => {
 
     const filtered = {};
     for (const key of allowed) {
-      if (integrationData[key] !== undefined && integrationData[key] !== null) {
+      if (integrationData[key] !== undefined && integrationData[key] !== null && integrationData[key] !== "") {
         filtered[key] = integrationData[key];
       }
     }
 
-    // Normalize Calendly link
     if (filtered.calendly_link) {
       filtered.calendly_link = String(filtered.calendly_link).replace(/<[^>]*>/g, "").trim();
-      if (filtered.calendly_link && !/^https?:\/\//i.test(filtered.calendly_link)) {
+      if (!/^https?:\/\//i.test(filtered.calendly_link)) {
         filtered.calendly_link = "https://" + filtered.calendly_link;
       }
     }
@@ -200,7 +185,7 @@ export const saveIntegrations = async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error("Supabase upsert error:", error);
+      console.error("❌ Supabase upsert error:", error);
       return res.status(500).json({
         success: false,
         error: "Database error while saving integration",
@@ -214,7 +199,7 @@ export const saveIntegrations = async (req, res) => {
       data: data || {},
     });
   } catch (err) {
-    console.error("Unexpected error saving integration:", err);
+    console.error("❌ Unexpected error saving integration:", err);
     return res.status(500).json({
       success: false,
       error: "Unexpected error saving integration",
@@ -223,17 +208,14 @@ export const saveIntegrations = async (req, res) => {
   }
 };
 
-/**
- * ------------------------------------------------------
- * 5) GET INTEGRATIONS
- * ------------------------------------------------------
- */
+/* ------------------------------------------------------
+ * 5) GET INTEGRATIONS (SAFE / PARTIAL)
+ * ------------------------------------------------------ */
 export const getIntegrations = async (req, res) => {
   try {
-    const { user_id } = req.query;
-    if (!user_id) {
-      return res.status(400).json({ success: false, error: "Missing user_id in query params" });
-    }
+    let { user_id } = req.query;
+    user_id = String(user_id || "").replace(/[<>]/g, "").trim();
+    if (!user_id) return res.status(400).json({ success: false, error: "Missing user_id" });
 
     const { data, error } = await supabase
       .from("user_integrations")
@@ -242,7 +224,7 @@ export const getIntegrations = async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error("Supabase fetch error:", error);
+      console.error("❌ Supabase fetch error:", error);
       return res.status(500).json({
         success: false,
         error: "Failed to fetch integrations",
@@ -250,9 +232,38 @@ export const getIntegrations = async (req, res) => {
       });
     }
 
-    return res.json({ success: true, data: data || {} });
+    // ✅ Return only available fields (ignore nulls)
+    const safeData = {};
+    if (data) {
+      const keys = [
+        "whatsapp_number",
+        "whatsapp_token",
+        "fb_page_id",
+        "fb_page_token",
+        "calendly_link",
+        "instagram_user_id",
+        "instagram_page_id",
+        "instagram_access_token",
+        "business_address",
+        "business_lat",
+        "business_lng",
+      ];
+      for (const key of keys) {
+        if (data[key] !== null && data[key] !== undefined && data[key] !== "") {
+          safeData[key] = data[key];
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: safeData,
+      message: Object.keys(safeData).length
+        ? "Integrations fetched successfully"
+        : "No integrations found for this user",
+    });
   } catch (err) {
-    console.error("getIntegrations unexpected error:", err);
+    console.error("❌ getIntegrations unexpected error:", err);
     return res.status(500).json({
       success: false,
       error: "Unexpected error fetching integrations",
