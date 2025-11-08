@@ -3,7 +3,6 @@ import { requireAuth } from "../middleware/authMiddleware.js";
 import {
   createChatbot,
   getUserChatbots,
-  getChatbotById,
   updateChatbot,
   deleteChatbot,
   retrainChatbot,
@@ -45,7 +44,7 @@ router.get(
         .json({ success: false, error: "Chatbot not found" });
     }
 
-    // Parse config
+    // Parse config safely
     let config = {};
     try {
       config =
@@ -92,12 +91,7 @@ router.get(
 // ----------------------
 // Preview route (PUBLIC for website chatbot)
 // ----------------------
-router.post(
-  "/preview",
-  asyncHandler(async (req, res, next) => {
-    await previewChat(req, res, next);
-  })
-);
+router.post("/preview", asyncHandler(previewChat));
 
 // ----------------------
 // Apply auth middleware for all routes below
@@ -109,7 +103,6 @@ router.use(requireAuth);
 // ----------------------
 router.post("/", asyncHandler(createChatbot));
 router.get("/", asyncHandler(getUserChatbots));
-router.get("/:id", asyncHandler(getChatbotById));
 router.put("/:id", asyncHandler(updateChatbot));
 router.delete("/:id", asyncHandler(deleteChatbot));
 
