@@ -15,9 +15,8 @@ const router = express.Router();
  * Utility wrapper for async routes to avoid repetitive try/catch
  * ------------------------------------------------------
  */
-const asyncHandler = (fn) => (req, res, next) => {
+const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
-};
 
 /**
  * ------------------------------------------------------
@@ -25,10 +24,10 @@ const asyncHandler = (fn) => (req, res, next) => {
  * ------------------------------------------------------
  */
 
-// GET /api/integrations/meta-webhook → Verify webhook
+// ✅ GET /api/integrations/meta-webhook → Verify webhook
 router.get("/meta-webhook", asyncHandler(verifyMetaWebhook));
 
-// POST /api/integrations/meta-webhook → Handle incoming messages
+// ✅ POST /api/integrations/meta-webhook → Handle incoming messages
 router.post("/meta-webhook", asyncHandler(handleMetaWebhook));
 
 /**
@@ -37,7 +36,7 @@ router.post("/meta-webhook", asyncHandler(handleMetaWebhook));
  * ------------------------------------------------------
  */
 
-// POST /api/integrations/calendly-webhook → Handle new appointments
+// ✅ POST /api/integrations/calendly-webhook → Handle new appointments
 router.post("/calendly-webhook", asyncHandler(handleCalendlyWebhook));
 
 /**
@@ -46,31 +45,37 @@ router.post("/calendly-webhook", asyncHandler(handleCalendlyWebhook));
  * ------------------------------------------------------
  */
 
-// GET /api/integrations?user_id=...
+// ✅ GET /api/integrations?user_id=...
 router.get(
   "/",
   asyncHandler(async (req, res) => {
     const { user_id } = req.query;
+
     if (!user_id) {
       return res
         .status(400)
         .json({ success: false, error: "Missing user_id in query params" });
     }
-    return getIntegrations(req, res);
+
+    // Use controller function directly
+    await getIntegrations(req, res);
   })
 );
 
-// POST /api/integrations
+// ✅ POST /api/integrations → Save or update user integrations
 router.post(
   "/",
   asyncHandler(async (req, res) => {
     const { user_id } = req.body;
+
     if (!user_id) {
       return res
         .status(400)
         .json({ success: false, error: "Missing user_id in request body" });
     }
-    return saveIntegrations(req, res);
+
+    // Use controller function directly
+    await saveIntegrations(req, res);
   })
 );
 
