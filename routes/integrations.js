@@ -1,4 +1,3 @@
-// backend/routes/integrations.js
 import express from "express";
 import {
   verifyMetaWebhook,
@@ -10,83 +9,37 @@ import {
 
 const router = express.Router();
 
-/**
- * ------------------------------------------------------
- * Utility wrapper for async routes to avoid repetitive try/catch
- * ------------------------------------------------------
- */
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+/* -----------------------------------------------------
+ * META (WhatsApp / FB / IG) webhooks
+ * Keep both legacy and clean paths for compatibility
+ * ----------------------------------------------------- */
+router.get("/meta-webhook", verifyMetaWebhook);
+router.post("/meta-webhook", handleMetaWebhook);
+router.get("/meta", verifyMetaWebhook);
+router.post("/meta", handleMetaWebhook);
 
-/**
- * ------------------------------------------------------
- * 1. META WEBHOOKS (WhatsApp + Messenger + Instagram)
- * ------------------------------------------------------
- */
+/* -----------------------------------------------------
+ * CALENDLY webhooks
+ * Legacy + clean paths
+ * ----------------------------------------------------- */
+router.post("/calendly-webhook", handleCalendlyWebhook);
+router.post("/calendly", handleCalendlyWebhook);
 
-// ✅ GET /api/integrations/meta-webhook → Verify webhook
-router.get("/meta-webhook", asyncHandler(verifyMetaWebhook));
+/* -----------------------------------------------------
+ * INTEGRATIONS CRUD
+ * ----------------------------------------------------- */
 
-// ✅ POST /api/integrations/meta-webhook → Handle incoming messages
-router.post("/meta-webhook", asyncHandler(handleMetaWebhook));
+// Save / update (upsert)
+router.post("/", saveIntegrations);
 
-/**
- * ------------------------------------------------------
- * 2. CALENDLY WEBHOOK
- * ------------------------------------------------------
- */
+// Get by user_id
+router.get("/", getIntegrations);
 
-// ✅ POST /api/integrations/calendly-webhook → Handle new appointments
-router.post("/calendly-webhook", asyncHandler(handleCalendlyWebhook));
-
-/**
- * ------------------------------------------------------
- * 3. USER INTEGRATIONS (Supabase storage)
- * ------------------------------------------------------
- */
-
-// ✅ GET /api/integrations?user_id=...
-router.get(
-  "/",
-  asyncHandler(async (req, res) => {
-    const { user_id } = req.query;
-
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Missing user_id in query params" });
-    }
-
-    // Use controller function directly
-    await getIntegrations(req, res);
-  })
-);
-
-// ✅ POST /api/integrations → Save or update user integrations
-router.post(
-  "/",
-  asyncHandler(async (req, res) => {
-    const { user_id } = req.body;
-
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Missing user_id in request body" });
-    }
-
-    // Use controller function directly
-    await saveIntegrations(req, res);
-  })
-);
-
-/**
- * ------------------------------------------------------
- * 4. Global Error Handling for Integrations Routes
- * ------------------------------------------------------
- */
+/* -----------------------------------------------------
+ * Error handler for this router
+ * ----------------------------------------------------- */
 router.use((err, req, res, next) => {
-  console.error("❌ Integrations route error:", err.stack || err.message);
-
+  console.error("Integrations route error:", err.stack || err.message);
   res.status(err.status || 500).json({
     success: false,
     error: "Internal server error in integrations route",

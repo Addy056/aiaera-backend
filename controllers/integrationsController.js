@@ -3,7 +3,7 @@ import supabase from "../config/supabaseClient.js";
 
 /**
  * ------------------------------------------------------
- * 1. META WEBHOOK VERIFICATION
+ * 1) META WEBHOOK VERIFICATION
  * ------------------------------------------------------
  */
 export const verifyMetaWebhook = (req, res) => {
@@ -14,21 +14,18 @@ export const verifyMetaWebhook = (req, res) => {
     const challenge = req.query["hub.challenge"];
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("✅ Meta webhook verified");
       return res.status(200).send(challenge);
     }
-
-    console.warn("⚠️ Meta webhook verification failed");
     return res.sendStatus(403);
   } catch (err) {
-    console.error("❌ Meta webhook verification error:", err.message);
+    console.error("Meta webhook verification error:", err.message);
     return res.sendStatus(500);
   }
 };
 
 /**
  * ------------------------------------------------------
- * 2. HANDLE META MESSAGES (WhatsApp + Messenger + Instagram)
+ * 2) HANDLE META (WA/FB/IG) MESSAGES
  * ------------------------------------------------------
  */
 export const handleMetaWebhook = async (req, res, next) => {
@@ -46,96 +43,63 @@ export const handleMetaWebhook = async (req, res, next) => {
       msg?.text?.body ||
       msg?.message?.text ||
       msg?.message ||
-      "";
+      "No message";
 
     const phoneNumberId = value?.metadata?.phone_number_id;
-    if (!phoneNumberId) {
-      console.warn("⚠️ Webhook missing phone_number_id");
-      return res.sendStatus(200);
-    }
+    if (!phoneNumberId) return res.sendStatus(200);
 
-    // Lookup integration by WhatsApp number
+    // Find integration by WhatsApp number id
     const { data: integration, error: fetchError } = await supabase
       .from("user_integrations")
       .select("*")
       .eq("whatsapp_number", phoneNumberId)
       .maybeSingle();
 
-    if (fetchError) {
-      console.error("❌ Supabase fetch error:", fetchError);
-      return res.sendStatus(500);
-    }
-    if (!integration) {
-      console.warn("⚠️ No integration found for phoneNumberId:", phoneNumberId);
-      return res.sendStatus(200);
-    }
+    if (fetchError || !integration) return res.sendStatus(200);
 
-    // --- Smart Auto-reply Logic ---
+    // Quick auto-reply
     const safeText = (text || "").toLowerCase();
-    let replyText;
-    const appointmentKeywords = [
-      "book",
-      "schedule",
-      "appointment",
-      "meeting",
-      "call",
-      "demo",
-      "consultation",
-    ];
-    const wantsAppointment = appointmentKeywords.some((k) => safeText.includes(k));
+    const wantsAppointment = ["book", "schedule", "appointment", "meeting", "call", "demo", "consultation"]
+      .some((k) => safeText.includes(k));
 
+    let replyText = `Thanks for your message: "${text}"`;
     if (wantsAppointment && integration.calendly_link) {
-      let cleanLink = String(integration.calendly_link).trim();
-      if (!/^https?:\/\//i.test(cleanLink)) cleanLink = "https://" + cleanLink;
-      replyText = `Hi! 👋\nI'd be happy to set that up.\nBook a time here: ${cleanLink}`;
+      let clean = integration.calendly_link.trim();
+      if (!/^https?:\/\//i.test(clean)) clean = "https://" + clean;
+      replyText = `Hi 👋 Book a time here: ${clean}`;
     } else if (wantsAppointment && !integration.calendly_link) {
-      replyText =
-        "It looks like we don’t have a booking link set up yet. Please check back later or contact us directly!";
+      replyText = "We don’t have a booking link set yet. Please check back later or contact us directly!";
     } else if (integration.business_address) {
       replyText = `📍 Our business location: ${integration.business_address}`;
-    } else {
-      replyText = text
-        ? `Thanks for your message: "${text}"`
-        : "Thanks for your message!";
     }
 
-    // --- Send Reply via Meta API ---
-    const accessToken =
+    const token =
       integration.whatsapp_token ||
-      integration.instagram_access_token ||
-      integration.fb_page_token;
+      integration.fb_page_token ||
+      integration.instagram_access_token;
 
-    if (!accessToken) {
-      console.warn("⚠️ No access token found for integration:", integration.user_id);
-      return res.sendStatus(200);
-    }
+    if (!token) return res.sendStatus(200);
 
     await axios.post(
       `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
       {
-        messaging_product: integration.whatsapp_token ? "whatsapp" : "instagram",
+        messaging_product: "whatsapp",
         to: from,
         text: { body: replyText },
       },
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      }
+      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
     );
 
-    console.log(`✅ Auto-replied to ${from}`);
     return res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Error in handleMetaWebhook:", err);
+    console.error("handleMetaWebhook error:", err);
     return next(err);
   }
 };
 
 /**
  * ------------------------------------------------------
- * 3. HANDLE CALENDLY WEBHOOK (NEW APPOINTMENTS)
+ * 3) CALENDLY WEBHOOK (NEW APPOINTMENTS)
  * ------------------------------------------------------
  */
 export const handleCalendlyWebhook = async (req, res, next) => {
@@ -145,8 +109,8 @@ export const handleCalendlyWebhook = async (req, res, next) => {
     if (event?.event === "invitee.created") {
       const invitee = event.payload?.invitee;
       const eventLink = event.payload?.event?.uri;
-      const customerName = invitee?.name || null;
-      const customerEmail = invitee?.email || null;
+      const name = invitee?.name || "Guest";
+      const email = invitee?.email || null;
 
       let bookingLink = event.payload?.event?.event_type?.scheduling_url || "";
       if (typeof bookingLink === "string") {
@@ -156,62 +120,51 @@ export const handleCalendlyWebhook = async (req, res, next) => {
         }
       }
 
-      const { data: integration, error: fetchError } = await supabase
+      const { data: integration } = await supabase
         .from("user_integrations")
         .select("*")
         .eq("calendly_link", bookingLink)
         .maybeSingle();
 
-      if (fetchError) {
-        console.error("❌ Supabase fetch error (Calendly):", fetchError);
-        return res.sendStatus(500);
-      }
-
       if (integration) {
-        const { error: insertError } = await supabase
-          .from("appointments")
-          .insert([
-            {
-              user_id: integration.user_id,
-              customer_name: customerName,
-              customer_email: customerEmail,
-              calendly_event_link: eventLink || bookingLink || null,
-            },
-          ]);
-
-        if (insertError) {
-          console.error("❌ Error inserting appointment:", insertError);
-        } else {
-          console.log(`✅ Appointment saved for ${customerName || "invitee"}`);
-        }
-      } else {
-        console.warn("⚠️ No matching integration for Calendly link:", bookingLink);
+        await supabase.from("appointments").insert([
+          {
+            user_id: integration.user_id,
+            customer_name: name,
+            customer_email: email,
+            calendly_event_link: eventLink || bookingLink || null,
+          },
+        ]);
+        console.log(`Appointment saved for ${name}`);
       }
     }
 
     return res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Error in handleCalendlyWebhook:", err);
+    console.error("handleCalendlyWebhook error:", err);
     return next(err);
   }
 };
 
 /**
  * ------------------------------------------------------
- * 4. SAVE INTEGRATIONS (UPSERT)
+ * 4) SAVE INTEGRATIONS (UPSERT)
  * ------------------------------------------------------
  */
 export const saveIntegrations = async (req, res) => {
   try {
     const { user_id, ...integrationData } = req.body;
-    if (!user_id)
-      return res.status(400).json({ success: false, error: "Missing user_id" });
 
-    const allowedFields = [
+    // Strict UUID validation (v1-5)
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+    if (!user_id || !uuidRegex.test(user_id)) {
+      return res.status(400).json({ success: false, error: "Invalid or missing user_id" });
+    }
+
+    // Only allow known columns that exist in DB
+    const allowed = [
       "whatsapp_number",
       "whatsapp_token",
-      "facebook_token",
-      "instagram_token",
       "fb_page_id",
       "fb_page_token",
       "calendly_link",
@@ -223,47 +176,45 @@ export const saveIntegrations = async (req, res) => {
       "business_lng",
     ];
 
-    const filteredData = {};
-    for (const key of allowedFields) {
-      if (integrationData[key] !== undefined && integrationData[key] !== null)
-        filteredData[key] = integrationData[key];
-    }
-
-    // Normalize Calendly URL
-    if (typeof filteredData.calendly_link === "string") {
-      filteredData.calendly_link = filteredData.calendly_link
-        .replace(/<[^>]*>/g, "")
-        .trim();
-      if (
-        filteredData.calendly_link &&
-        !/^https?:\/\//i.test(filteredData.calendly_link)
-      ) {
-        filteredData.calendly_link = "https://" + filteredData.calendly_link;
+    const filtered = {};
+    for (const key of allowed) {
+      if (integrationData[key] !== undefined && integrationData[key] !== null) {
+        filtered[key] = integrationData[key];
       }
     }
 
-    filteredData.updated_at = new Date().toISOString();
+    // Normalize Calendly link
+    if (filtered.calendly_link) {
+      filtered.calendly_link = String(filtered.calendly_link).replace(/<[^>]*>/g, "").trim();
+      if (filtered.calendly_link && !/^https?:\/\//i.test(filtered.calendly_link)) {
+        filtered.calendly_link = "https://" + filtered.calendly_link;
+      }
+    }
+
+    filtered.updated_at = new Date().toISOString();
 
     const { data, error } = await supabase
       .from("user_integrations")
-      .upsert([{ user_id, ...filteredData }], { onConflict: "user_id" })
+      .upsert([{ user_id, ...filtered }], { onConflict: "user_id" })
       .select()
       .maybeSingle();
 
     if (error) {
-      console.error("❌ Supabase upsert error:", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Failed to save integration", details: error });
+      console.error("Supabase upsert error:", error);
+      return res.status(500).json({
+        success: false,
+        error: "Database error while saving integration",
+        details: error.message || error,
+      });
     }
 
     return res.json({
       success: true,
-      message: "Integration details saved successfully",
+      message: "Integration saved successfully",
       data: data || {},
     });
   } catch (err) {
-    console.error("❌ Error saving integrations:", err);
+    console.error("Unexpected error saving integration:", err);
     return res.status(500).json({
       success: false,
       error: "Unexpected error saving integration",
@@ -274,14 +225,15 @@ export const saveIntegrations = async (req, res) => {
 
 /**
  * ------------------------------------------------------
- * 5. GET INTEGRATIONS (ENHANCED)
+ * 5) GET INTEGRATIONS
  * ------------------------------------------------------
  */
 export const getIntegrations = async (req, res) => {
   try {
     const { user_id } = req.query;
-    if (!user_id)
-      return res.status(400).json({ success: false, error: "Missing user_id" });
+    if (!user_id) {
+      return res.status(400).json({ success: false, error: "Missing user_id in query params" });
+    }
 
     const { data, error } = await supabase
       .from("user_integrations")
@@ -290,26 +242,17 @@ export const getIntegrations = async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error("❌ Supabase fetch error:", error);
-      return res
-        .status(500)
-        .json({ success: false, error: "Failed to fetch integrations", details: error });
+      console.error("Supabase fetch error:", error);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to fetch integrations",
+        details: error.message || error,
+      });
     }
 
-    // ✅ Auto-format data for frontend compatibility
-    const integrations = {
-      whatsapp_number: data?.whatsapp_number || "",
-      fb_page_id: data?.fb_page_id || "",
-      instagram_page_id: data?.instagram_page_id || "",
-      calendly_link: data?.calendly_link || "",
-      business_address: data?.business_address || "",
-      business_lat: data?.business_lat || null,
-      business_lng: data?.business_lng || null,
-    };
-
-    return res.json({ success: true, data: integrations });
+    return res.json({ success: true, data: data || {} });
   } catch (err) {
-    console.error("❌ Error fetching integrations:", err);
+    console.error("getIntegrations unexpected error:", err);
     return res.status(500).json({
       success: false,
       error: "Unexpected error fetching integrations",
