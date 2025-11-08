@@ -4,47 +4,122 @@ import Groq from "groq-sdk";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Supported languages
-const SUPPORTED_LANGUAGES = ["en", "es", "fr", "de", "hi"];
+// ----------------------
+// Helpers
+// ----------------------
+const isValidUUID = (id) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+
+/**
+ * Safely parse JSON-like config objects
+ */
+const safeParseConfig = (cfg) => {
+  if (!cfg) return {};
+  try {
+    return typeof cfg === "string" ? JSON.parse(cfg) : { ...cfg };
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Build a neutral assistant system prompt with short helpful prompts.
+ * Skips any missing fields gracefully.
+ */
+const buildAssistantSystemPrompt = (ctx) => {
+  const lines = [
+    `You are a friendly, neutral AI assistant for this business. You help website visitors and customers.`,
+    `Always be concise, factual, and clear. If helpful, add ONE short follow-up prompt at the end (e.g., "Would you like the booking link?" or "Want directions?").`,
+    ``,
+    `--- Business Context ---`,
+    `Business Name: ${ctx.name || "Not provided"}`,
+    `Business Description: ${ctx.business_info || "Not provided"}`,
+  ];
+
+  if (ctx.website_url) lines.push(`Website: ${ctx.website_url}`);
+  if (ctx.business_address) lines.push(`Address: ${ctx.business_address}`);
+
+  if (ctx.location?.latitude && ctx.location?.longitude) {
+    lines.push(
+      `Location: ${ctx.location.latitude}, ${ctx.location.longitude}${
+        ctx.location.googleMapsLink ? ` (${ctx.location.googleMapsLink})` : ""
+      }`
+    );
+  }
+
+  if (ctx.calendly_link) lines.push(`Calendly: ${ctx.calendly_link}`);
+
+  if (ctx.filesText) {
+    lines.push(``, `--- Reference Files ---`, ctx.filesText);
+  }
+
+  lines.push(
+    ``,
+    `--- Guidelines ---`,
+    `- Speak as the assistant for the business (not as the business owner).`,
+    `- If user asks about booking and Calendly is available, include the link.`,
+    `- If user asks about location and address/coords exist, include them.`,
+    `- If the user asks product/service questions, use the description/files.`,
+    `- Do not say "you haven't provided info". If info is missing, answer generally and offer help.`,
+    `- Keep answers short; include one short helpful follow-up prompt when useful.`
+  );
+
+  return lines.join("\n");
+};
+
+/**
+ * Fetch file contents from chatbot_file_data by file IDs for a user
+ */
+const fetchFilesText = async (userId, fileIds) => {
+  if (!userId || !Array.isArray(fileIds) || fileIds.length === 0) return "";
+  const { data: fileData, error } = await supabase
+    .from("chatbot_file_data")
+    .select("content")
+    .in("file_id", fileIds)
+    .eq("user_id", userId);
+
+  if (error || !fileData?.length) return "";
+  const contents = fileData.map((f) => f.content).filter(Boolean);
+  return contents.length ? contents.join("\n---\n") : "";
+};
+
+/**
+ * Map frontend messages to Groq format safely
+ */
+const mapToGroqMessages = (systemPrompt, messages) => {
+  const userAssistant = (m) => {
+    const role = m.role
+      ? m.role
+      : m.sender === "user"
+      ? "user"
+      : "assistant";
+    return { role, content: m.content || m.text || "" };
+  };
+
+  return [
+    { role: "system", content: systemPrompt },
+    ...messages.filter(Boolean).map(userAssistant),
+  ];
+};
 
 // ----------------------
-// Normalize and whitelist fields
+// CRUD (unchanged)
 // ----------------------
 const shapeChatbotPayload = (body = {}) => {
   const safeConfig =
     body.config && typeof body.config === "object"
-      ? JSON.parse(JSON.stringify(body.config)) // sanitize
+      ? JSON.parse(JSON.stringify(body.config))
       : {};
-
-  const language =
-    typeof body.language === "string" &&
-    SUPPORTED_LANGUAGES.includes(body.language.toLowerCase())
-      ? body.language.toLowerCase()
-      : "en"; // fallback
 
   return {
     name: typeof body.name === "string" ? body.name.trim() : null,
     business_info:
-      typeof body.business_info === "string"
-        ? body.business_info.trim()
-        : null,
+      typeof body.business_info === "string" ? body.business_info.trim() : null,
     config: safeConfig,
-    language,
     updated_at: new Date().toISOString(),
   };
 };
 
-// ----------------------
-// UUID validation
-// ----------------------
-const isValidUUID = (id) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    id
-  );
-
-// ----------------------
-// Create chatbot
-// ----------------------
 export const createChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
@@ -59,7 +134,6 @@ export const createChatbot = async (req, res) => {
       .single();
 
     if (error) throw error;
-
     return res.status(201).json({ chatbot: data });
   } catch (err) {
     console.error("[createChatbot] error:", err.message || err);
@@ -67,9 +141,6 @@ export const createChatbot = async (req, res) => {
   }
 };
 
-// ----------------------
-// Get all user chatbots
-// ----------------------
 export const getUserChatbots = async (req, res) => {
   try {
     const userId = req.user?.id || req.query.userId;
@@ -82,7 +153,6 @@ export const getUserChatbots = async (req, res) => {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     return res.json({ chatbots: data || [] });
   } catch (err) {
     console.error("[getUserChatbots] error:", err.message || err);
@@ -90,9 +160,6 @@ export const getUserChatbots = async (req, res) => {
   }
 };
 
-// ----------------------
-// Get chatbot by ID
-// ----------------------
 export const getChatbotById = async (req, res) => {
   try {
     const userId = req.user?.id || req.query.userId;
@@ -118,9 +185,6 @@ export const getChatbotById = async (req, res) => {
   }
 };
 
-// ----------------------
-// Update chatbot
-// ----------------------
 export const updateChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
@@ -149,9 +213,6 @@ export const updateChatbot = async (req, res) => {
   }
 };
 
-// ----------------------
-// Delete chatbot
-// ----------------------
 export const deleteChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
@@ -167,7 +228,6 @@ export const deleteChatbot = async (req, res) => {
       .eq("user_id", userId);
 
     if (error) throw error;
-
     return res.json({ success: true, message: "Chatbot deleted" });
   } catch (err) {
     console.error("[deleteChatbot] error:", err.message || err);
@@ -175,14 +235,10 @@ export const deleteChatbot = async (req, res) => {
   }
 };
 
-// ----------------------
-// Retrain chatbot
-// ----------------------
 export const retrainChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
-    const { chatbotId, businessInfo, files, websiteUrl, latitude, longitude } =
-      req.body;
+    const { chatbotId, businessInfo, files, websiteUrl, latitude, longitude } = req.body;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     if (!chatbotId || !isValidUUID(chatbotId))
@@ -198,15 +254,7 @@ export const retrainChatbot = async (req, res) => {
     if (fetchError || !chatbot)
       return res.status(404).json({ error: "Chatbot not found" });
 
-    let currentConfig = {};
-    try {
-      currentConfig =
-        typeof chatbot.config === "string"
-          ? JSON.parse(chatbot.config)
-          : chatbot.config || {};
-    } catch {
-      currentConfig = {};
-    }
+    let currentConfig = safeParseConfig(chatbot.config);
 
     const { data: integrations } = await supabase
       .from("user_integrations")
@@ -222,7 +270,8 @@ export const retrainChatbot = async (req, res) => {
         latitude: latitude ?? integrations?.business_lat ?? null,
         longitude: longitude ?? integrations?.business_lng ?? null,
         googleMapsLink:
-          latitude || integrations?.business_lat
+          (latitude ?? integrations?.business_lat) != null &&
+          (longitude ?? integrations?.business_lng) != null
             ? `https://www.google.com/maps?q=${
                 latitude ?? integrations?.business_lat
               },${longitude ?? integrations?.business_lng}`
@@ -262,72 +311,77 @@ export const previewChat = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
     const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
-    const chatbotConfig =
+    const incomingConfig =
       typeof req.body.chatbotConfig === "object" ? req.body.chatbotConfig : {};
 
     if (!userId) {
       return res.status(401).json({ success: false, error: "Unauthorized" });
     }
 
-    const { data: integrations, error: intError } = await supabase
+    // Try to enrich from DB if business_info/name missing
+    const { data: chatbotRow } = await supabase
+      .from("chatbots")
+      .select("id, name, business_info, config")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const dbConfig = safeParseConfig(chatbotRow?.config);
+
+    // Pull integrations
+    const { data: integrations } = await supabase
       .from("user_integrations")
       .select("business_address, business_lat, business_lng, calendly_link")
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (intError) console.error("[previewChat] integrations error:", intError);
-
-    const safeConfig = {
-      business_info: chatbotConfig.business_info || "A helpful business assistant.",
-      files: Array.isArray(chatbotConfig.files) ? chatbotConfig.files : [],
-      website_url: chatbotConfig.website_url || null,
+    // Merge context (prefer incoming, fallback to DB)
+    const merged = {
+      name: incomingConfig.name || chatbotRow?.name || "Business",
+      business_info:
+        incomingConfig.business_info ||
+        chatbotRow?.business_info ||
+        "This business provides helpful services and products to its customers.",
+      website_url: incomingConfig.website_url || dbConfig.website_url || null,
+      business_address:
+        incomingConfig.business_address || dbConfig.business_address || integrations?.business_address || null,
+      calendly_link:
+        incomingConfig.integrations?.calendly ||
+        incomingConfig.calendly_link ||
+        dbConfig.calendly_link ||
+        integrations?.calendly_link ||
+        null,
       location: {
-        latitude: chatbotConfig.location?.latitude || integrations?.business_lat || null,
-        longitude: chatbotConfig.location?.longitude || integrations?.business_lng || null,
-        googleMapsLink:
-          (chatbotConfig.location?.latitude || integrations?.business_lat) &&
-          (chatbotConfig.location?.longitude || integrations?.business_lng)
-            ? `https://www.google.com/maps?q=${
-                chatbotConfig.location?.latitude ?? integrations?.business_lat
-              },${chatbotConfig.location?.longitude ?? integrations?.business_lng}`
-            : null,
+        latitude:
+          incomingConfig.location?.latitude ??
+          dbConfig?.location?.latitude ??
+          integrations?.business_lat ??
+          null,
+        longitude:
+          incomingConfig.location?.longitude ??
+          dbConfig?.location?.longitude ??
+          integrations?.business_lng ??
+          null,
+        googleMapsLink: null, // computed below
       },
-      business_address: integrations?.business_address || null,
-      calendly_link: integrations?.calendly_link || null,
+      files: Array.isArray(incomingConfig.files)
+        ? incomingConfig.files
+        : Array.isArray(dbConfig.files)
+        ? dbConfig.files
+        : [],
     };
 
-    let fileContents = [];
-    if (safeConfig.files.length > 0) {
-      const { data: fileData } = await supabase
-        .from("chatbot_file_data")
-        .select("content")
-        .in("file_id", safeConfig.files)
-        .eq("user_id", userId);
-
-      if (fileData?.length) fileContents = fileData.map((f) => f.content);
+    if (merged.location.latitude != null && merged.location.longitude != null) {
+      merged.location.googleMapsLink = `https://www.google.com/maps?q=${merged.location.latitude},${merged.location.longitude}`;
     }
 
-    const filesText = fileContents.length
-      ? `\n\nFiles Content:\n${fileContents.join("\n---\n")}`
-      : "";
+    // Reference file content (best-effort)
+    const filesText = await fetchFilesText(userId, merged.files);
+    const systemPrompt = buildAssistantSystemPrompt({
+      ...merged,
+      filesText: filesText || undefined,
+    });
 
-    const systemPrompt = `
-You are an AI assistant for this business.
-Business Info: ${safeConfig.business_info}
-Website: ${safeConfig.website_url || "Not provided"}
-Business Address: ${safeConfig.business_address || "Not provided"}
-Google Maps: ${safeConfig.location.googleMapsLink || "Not provided"}
-Calendly: ${safeConfig.calendly_link || "Not provided"}
-${filesText}
-`;
-
-    const groqMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages.map((m) => ({
-        role: m.role || (m.sender === "user" ? "user" : "assistant"),
-        content: m.content || m.text,
-      })),
-    ];
+    const groqMessages = mapToGroqMessages(systemPrompt, messages);
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
@@ -338,7 +392,7 @@ ${filesText}
       completion.choices?.[0]?.message?.content ||
       "Sorry, I couldn’t generate a response.";
 
-    return res.json({ success: true, reply, chatbotConfig: safeConfig });
+    return res.json({ success: true, reply, chatbotConfig: merged });
   } catch (err) {
     console.error("[previewChat] error:", err.message || err);
     return res
@@ -360,52 +414,51 @@ export const publicChatbot = async (req, res) => {
         .status(400)
         .json({ success: false, error: "Missing chatbot ID or messages" });
 
-    const { data: chatbot, error } = await supabase
+    // Pull chatbot + user_id so we can fetch integrations
+    const { data: chatbot, error: botErr } = await supabase
       .from("chatbots")
-      .select("business_info, config")
+      .select("id, user_id, name, business_info, config")
       .eq("id", id)
       .single();
 
-    if (error || !chatbot)
+    if (botErr || !chatbot)
       return res.status(404).json({ success: false, error: "Chatbot not found" });
 
-    let safeConfig = {};
-    try {
-      safeConfig =
-        typeof chatbot.config === "string"
-          ? JSON.parse(chatbot.config)
-          : chatbot.config || {};
-    } catch {
-      safeConfig = {};
-    }
+    const cfg = safeParseConfig(chatbot.config);
 
-    const combinedConfig = {
-      business_info: chatbot.business_info || "A helpful business assistant.",
-      website_url: safeConfig.website_url || null,
-      business_address: safeConfig.business_address || null,
-      calendly_link: safeConfig.calendly_link || null,
+    const { data: integrations } = await supabase
+      .from("user_integrations")
+      .select("business_address, business_lat, business_lng, calendly_link")
+      .eq("user_id", chatbot.user_id)
+      .maybeSingle();
+
+    const merged = {
+      name: chatbot.name || "Business",
+      business_info:
+        chatbot.business_info ||
+        "This business provides helpful services and products to its customers.",
+      website_url: cfg.website_url || null,
+      business_address: cfg.business_address || integrations?.business_address || null,
+      calendly_link: cfg.calendly_link || integrations?.calendly_link || null,
+      location: {
+        latitude: cfg?.location?.latitude ?? integrations?.business_lat ?? null,
+        longitude: cfg?.location?.longitude ?? integrations?.business_lng ?? null,
+        googleMapsLink: null,
+      },
+      files: Array.isArray(cfg.files) ? cfg.files : [],
     };
 
-    const systemPrompt = `
-You are an AI assistant for this business.
-Business Info: ${combinedConfig.business_info}
-Website: ${combinedConfig.website_url || "Not provided"}
-Business Address: ${combinedConfig.business_address || "Not provided"}
-Calendly Link: ${combinedConfig.calendly_link || "Not provided"}
+    if (merged.location.latitude != null && merged.location.longitude != null) {
+      merged.location.googleMapsLink = `https://www.google.com/maps?q=${merged.location.latitude},${merged.location.longitude}`;
+    }
 
-Guidelines:
-- Keep responses friendly and short.
-- Include Calendly link if user asks to book meeting.
-- Use address if asked for location.
-`;
+    const filesText = await fetchFilesText(chatbot.user_id, merged.files);
+    const systemPrompt = buildAssistantSystemPrompt({
+      ...merged,
+      filesText: filesText || undefined,
+    });
 
-    const groqMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages.map((m) => ({
-        role: m.role || "user",
-        content: m.content || "",
-      })),
-    ];
+    const groqMessages = mapToGroqMessages(systemPrompt, messages);
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
