@@ -15,6 +15,7 @@ export const verifyMetaWebhook = (req, res) => {
       console.log("✅ Meta webhook verified");
       return res.status(200).send(challenge);
     }
+    console.warn("⚠️ Meta webhook verification failed");
     return res.sendStatus(403);
   } catch (err) {
     console.error("❌ Meta webhook verification error:", err.message);
@@ -140,12 +141,15 @@ export const handleCalendlyWebhook = async (req, res, next) => {
 };
 
 /* ------------------------------------------------------
- * 4) SAVE INTEGRATIONS (UPSERT)
+ * 4) SAVE INTEGRATIONS (SAFE + ROBUST)
  * ------------------------------------------------------ */
 export const saveIntegrations = async (req, res) => {
   try {
     let { user_id, ...integrationData } = req.body;
-    if (!user_id) return res.status(400).json({ success: false, error: "Missing user_id" });
+    if (!user_id)
+      return res.status(400).json({ success: false, error: "Missing user_id" });
+
+    // ✅ Clean UUID format
     user_id = String(user_id).replace(/[<>]/g, "").trim();
 
     const allowed = [
@@ -169,6 +173,7 @@ export const saveIntegrations = async (req, res) => {
       }
     }
 
+    // ✅ Auto-clean Calendly link
     if (filtered.calendly_link) {
       filtered.calendly_link = String(filtered.calendly_link).replace(/<[^>]*>/g, "").trim();
       if (!/^https?:\/\//i.test(filtered.calendly_link)) {
@@ -178,6 +183,7 @@ export const saveIntegrations = async (req, res) => {
 
     filtered.updated_at = new Date().toISOString();
 
+    // ✅ Upsert with safety logging
     const { data, error } = await supabase
       .from("user_integrations")
       .upsert([{ user_id, ...filtered }], { onConflict: "user_id" })
@@ -189,10 +195,11 @@ export const saveIntegrations = async (req, res) => {
       return res.status(500).json({
         success: false,
         error: "Database error while saving integration",
-        details: error.message || error,
+        details: error?.message || JSON.stringify(error),
       });
     }
 
+    console.log(`✅ Integration saved for user ${user_id}`);
     return res.json({
       success: true,
       message: "Integration saved successfully",
@@ -215,7 +222,8 @@ export const getIntegrations = async (req, res) => {
   try {
     let { user_id } = req.query;
     user_id = String(user_id || "").replace(/[<>]/g, "").trim();
-    if (!user_id) return res.status(400).json({ success: false, error: "Missing user_id" });
+    if (!user_id)
+      return res.status(400).json({ success: false, error: "Missing user_id" });
 
     const { data, error } = await supabase
       .from("user_integrations")
@@ -228,31 +236,16 @@ export const getIntegrations = async (req, res) => {
       return res.status(500).json({
         success: false,
         error: "Failed to fetch integrations",
-        details: error.message || error,
+        details: error?.message || JSON.stringify(error),
       });
     }
 
-    // ✅ Return only available fields (ignore nulls)
+    // ✅ Ignore null/empty fields
     const safeData = {};
     if (data) {
-      const keys = [
-        "whatsapp_number",
-        "whatsapp_token",
-        "fb_page_id",
-        "fb_page_token",
-        "calendly_link",
-        "instagram_user_id",
-        "instagram_page_id",
-        "instagram_access_token",
-        "business_address",
-        "business_lat",
-        "business_lng",
-      ];
-      for (const key of keys) {
-        if (data[key] !== null && data[key] !== undefined && data[key] !== "") {
-          safeData[key] = data[key];
-        }
-      }
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== "") safeData[key] = value;
+      });
     }
 
     return res.json({
