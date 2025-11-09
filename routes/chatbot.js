@@ -51,27 +51,46 @@ router.get(
         typeof chatbotData.config === "string"
           ? JSON.parse(chatbotData.config)
           : chatbotData.config || {};
-    } catch {
+    } catch (parseErr) {
+      console.warn(
+        `Failed to parse chatbot config for chatbot ${id}:`,
+        parseErr?.message || parseErr
+      );
       config = {};
     }
 
     // Fetch user integrations
-    const { data: integrationData } = await supabase
+    const { data: integrationData, error: integrationError } = await supabase
       .from("user_integrations")
       .select("business_address, business_lat, business_lng, calendly_link")
       .eq("user_id", chatbotData.user_id)
       .maybeSingle();
 
+    if (integrationError) {
+      // Log it so we can see why location/address might be missing
+      console.warn(
+        `Failed to fetch integrations for user ${chatbotData.user_id}:`,
+        integrationError.message || integrationError
+      );
+    }
+
     const integrations = integrationData || {};
+
+    // Determine business description (try multiple possible column names)
+    const businessDescription =
+      chatbotData.business_description ??
+      chatbotData.businessInfo ??
+      chatbotData.business_info ??
+      null;
 
     // Build public chatbot object
     const publicChatbot = {
       id: chatbotData.id,
       name: chatbotData.name,
-      businessDescription: chatbotData.business_info,
-      websiteUrl: config.website_url || null,
-      logoUrl: config.logo_url || null,
-      files: Array.isArray(config.files) ? config.files : [],
+      businessDescription,
+      websiteUrl: config?.website_url || null,
+      logoUrl: config?.logo_url || null,
+      files: Array.isArray(config?.files) ? config.files : [],
       location: {
         latitude: integrations.business_lat || null,
         longitude: integrations.business_lng || null,

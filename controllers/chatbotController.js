@@ -8,7 +8,9 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
    Helper functions
 ------------------------------ */
 const isValidUUID = (id) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id
+  );
 
 const safeParseConfig = (cfg) => {
   try {
@@ -25,47 +27,75 @@ const fetchFilesText = async (userId, fileIds) => {
     .select("content")
     .in("file_id", fileIds)
     .eq("user_id", userId);
-  if (error || !data?.length) return "";
+  if (error) {
+    console.warn("[fetchFilesText] supabase error:", error.message || error);
+    return "";
+  }
+  if (!data?.length) return "";
   return data.map((f) => f.content).filter(Boolean).join("\n---\n");
 };
 
 /**
- * ✅ Creates a neutral, concise business-aware system prompt.
- * Keeps info about website/calendly hidden until user asks.
+ * Normalize business info field presence:
+ * prefer business_info, then business_description, then businessInfo
+ */
+const pickBusinessInfo = (obj = {}) =>
+  obj?.business_info ?? obj?.business_description ?? obj?.businessInfo ?? null;
+
+/**
+ * Build assistant system prompt.
+ * Important: don't insert "Not provided" which primes the assistant to ask for info.
+ * If description is absent, either omit that line or include a short neutral line.
  */
 const buildAssistantSystemPrompt = (ctx) => {
-  const info = [
+  const lines = [
     `You are a friendly, neutral AI assistant representing this business.`,
-    `Your goal is to answer customer questions using only the business data provided.`,
-    `Do NOT show links or addresses unless the user explicitly asks for them.`,
+    `Use only the business information provided below to answer customer questions.`,
+    `Do NOT volunteer addresses, links, or booking details unless the customer asks for them.`,
     ``,
     `--- BUSINESS INFO ---`,
-    `Business Name: ${ctx.name || "Not provided"}`,
-    `Business Description: ${ctx.business_info || "Not provided"}`,
+    `Business Name: ${ctx.name || "Unknown business"}`,
   ];
 
+  // Only include a business description if present; otherwise include a short neutral hint.
+  if (ctx.business_info) {
+    lines.push(`Business Description: ${ctx.business_info}`);
+  } else if (ctx.filesText) {
+    // If files were provided but no short description, prefer the files as source.
+    lines.push(
+      `Business Description: (Use the reference files below for details about products/services.)`
+    );
+  } else {
+    // Neutral fallback that does NOT invite the assistant to ask the user for more info.
+    lines.push(
+      `Business Description: This business serves customers with products and services relevant to the customer's queries.`
+    );
+  }
+
   if (ctx.business_address)
-    info.push(`Address: ${ctx.business_address} (mention only if asked about location)`);
+    lines.push(
+      `Address: ${ctx.business_address} (mention only if asked about location)`
+    );
 
   if (ctx.location?.latitude && ctx.location?.longitude) {
-    info.push(
+    lines.push(
       `Coordinates: ${ctx.location.latitude}, ${ctx.location.longitude} (use only if location asked)`
     );
   }
 
-  // ✅ Calendly and Website are hidden until asked
+  // Calendly / website are explicitly hidden unless requested
   if (ctx.website_url)
-    info.push(
+    lines.push(
       `Website Link (show ONLY if user asks about website, visit, or online presence): ${ctx.website_url}`
     );
   if (ctx.calendly_link)
-    info.push(
+    lines.push(
       `Calendly Link (show ONLY if user asks to book, schedule, or set appointment): ${ctx.calendly_link}`
     );
 
-  if (ctx.filesText) info.push(`\n--- Reference Files ---\n${ctx.filesText}`);
+  if (ctx.filesText) lines.push(`\n--- Reference Files ---\n${ctx.filesText}`);
 
-  info.push(
+  lines.push(
     ``,
     `--- GUIDELINES ---`,
     `- Keep responses short, natural, and accurate.`,
@@ -73,11 +103,11 @@ const buildAssistantSystemPrompt = (ctx) => {
     `- If a user asks for the website, then provide the link.`,
     `- If a user asks for booking/scheduling, then show the Calendly link.`,
     `- If a user asks for location, include address or map link.`,
-    `- Never say "you haven't provided info" — instead, use general context.`,
+    `- Never say "you haven't provided info" or ask the user to provide their business description.`,
     `- Optionally end with a short helpful follow-up (e.g., "Would you like the booking link?").`
   );
 
-  return info.join("\n");
+  return lines.join("\n");
 };
 
 const mapToGroqMessages = (systemPrompt, messages) => [
@@ -94,7 +124,11 @@ const mapToGroqMessages = (systemPrompt, messages) => [
 const shapeChatbotPayload = (body = {}) => ({
   name: typeof body.name === "string" ? body.name.trim() : null,
   business_info:
-    typeof body.business_info === "string" ? body.business_info.trim() : null,
+    typeof body.business_info === "string"
+      ? body.business_info.trim()
+      : typeof body.business_description === "string"
+      ? body.business_description.trim()
+      : null,
   config:
     body.config && typeof body.config === "object"
       ? JSON.parse(JSON.stringify(body.config))
@@ -266,11 +300,15 @@ export const previewChat = async (req, res) => {
     if (!userId)
       return res.status(401).json({ success: false, error: "Unauthorized" });
 
-    const { data: chatbotRow } = await supabase
+    const { data: chatbotRow, error: chatbotErr } = await supabase
       .from("chatbots")
-      .select("name, business_info, config")
+      .select("name, business_info, business_description, config")
       .eq("user_id", userId)
       .maybeSingle();
+
+    if (chatbotErr) {
+      console.warn("[previewChat] failed to fetch chatbot row:", chatbotErr.message || chatbotErr);
+    }
 
     const dbConfig = safeParseConfig(chatbotRow?.config);
     const { data: integrations } = await supabase
@@ -282,9 +320,10 @@ export const previewChat = async (req, res) => {
     const merged = {
       name: incoming.name || chatbotRow?.name || "Business",
       business_info:
-        incoming.business_info ||
-        chatbotRow?.business_info ||
-        "This business provides helpful services and chatbots for clients.",
+        incoming.business_info ??
+        incoming.business_description ??
+        pickBusinessInfo(chatbotRow) ??
+        null,
       website_url: incoming.website_url || dbConfig.website_url || null,
       business_address:
         incoming.business_address ||
@@ -323,14 +362,21 @@ export const previewChat = async (req, res) => {
     });
 
     const groqMessages = mapToGroqMessages(systemPrompt, messages);
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages: groqMessages,
-    });
+
+    let completion;
+    try {
+      completion = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: groqMessages,
+      });
+    } catch (gErr) {
+      console.error("[previewChat] groq error:", gErr);
+      return res.status(500).json({ success: false, error: "AI generation failed" });
+    }
 
     const reply =
-      completion.choices?.[0]?.message?.content ||
-      "I'm here to help you learn about this business.";
+      completion?.choices?.[0]?.message?.content ||
+      "I'm here to help with information about this business.";
 
     return res.json({ success: true, reply, chatbotConfig: merged });
   } catch (err) {
@@ -352,11 +398,16 @@ export const publicChatbot = async (req, res) => {
     if (!id || !Array.isArray(messages))
       return res.status(400).json({ success: false, error: "Invalid input" });
 
-    const { data: chatbot } = await supabase
+    const { data: chatbot, error: chatbotErr } = await supabase
       .from("chatbots")
-      .select("user_id, name, business_info, config")
+      .select("user_id, name, business_info, business_description, config")
       .eq("id", id)
       .single();
+
+    if (chatbotErr || !chatbot) {
+      console.warn("[publicChatbot] failed to fetch chatbot:", chatbotErr);
+      return res.status(404).json({ success: false, error: "Chatbot not found" });
+    }
 
     const cfg = safeParseConfig(chatbot?.config);
     const { data: integrations } = await supabase
@@ -367,9 +418,7 @@ export const publicChatbot = async (req, res) => {
 
     const merged = {
       name: chatbot.name || "Business",
-      business_info:
-        chatbot.business_info ||
-        "We provide helpful products and chatbot solutions for businesses.",
+      business_info: pickBusinessInfo(chatbot) ?? null,
       website_url: cfg.website_url || null,
       business_address: cfg.business_address || integrations?.business_address || null,
       calendly_link: cfg.calendly_link || integrations?.calendly_link || null,
@@ -387,13 +436,20 @@ export const publicChatbot = async (req, res) => {
     });
 
     const groqMessages = mapToGroqMessages(systemPrompt, messages);
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      messages: groqMessages,
-    });
+
+    let completion;
+    try {
+      completion = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages: groqMessages,
+      });
+    } catch (gErr) {
+      console.error("[publicChatbot] groq error:", gErr);
+      return res.status(500).json({ success: false, error: "AI generation failed" });
+    }
 
     const reply =
-      completion.choices?.[0]?.message?.content ||
+      completion?.choices?.[0]?.message?.content ||
       "I'm your virtual assistant here to help with business information.";
 
     return res.json({ success: true, reply });

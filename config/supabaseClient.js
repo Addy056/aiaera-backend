@@ -2,9 +2,6 @@
 import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
 
-// ----------------------
-// Extract environment variables
-// ----------------------
 const {
   SUPABASE_URL,
   SUPABASE_SERVICE_ROLE_KEY,
@@ -13,65 +10,85 @@ const {
   NODE_ENV,
 } = process.env;
 
-// ----------------------
-// Validate environment variables
-// ----------------------
 if (!SUPABASE_URL) {
-  throw new Error("[Supabase] ❌ Missing SUPABASE_URL in environment variables.");
+  throw new Error("[Supabase] Missing SUPABASE_URL in environment variables.");
 }
 
 if (!SUPABASE_SERVICE_ROLE_KEY && !SUPABASE_ANON_KEY) {
   throw new Error(
-    "[Supabase] ❌ Missing both SUPABASE_SERVICE_ROLE_KEY and SUPABASE_ANON_KEY. Please set at least one."
+    "[Supabase] Missing both SUPABASE_SERVICE_ROLE_KEY and SUPABASE_ANON_KEY. Please set at least one."
   );
 }
 
-// ----------------------
-// Use the Service Role Key (preferred for backend)
-// Fallback to ANON key for local dev/testing
-// ----------------------
 const supabaseKey =
   SUPABASE_SERVICE_ROLE_KEY && SUPABASE_SERVICE_ROLE_KEY.trim() !== ""
     ? SUPABASE_SERVICE_ROLE_KEY
     : SUPABASE_ANON_KEY;
 
+if (!SUPABASE_SERVICE_ROLE_KEY && NODE_ENV === "production") {
+  // Warn if running in production without a service role key.
+  console.warn(
+    "[Supabase] Running in production without SUPABASE_SERVICE_ROLE_KEY — RLS may block reads."
+  );
+}
+
+// Prefer globalThis.fetch where available (Node 18+)
+const nativeFetch = globalThis.fetch;
+
 const supabase = createClient(SUPABASE_URL, supabaseKey, {
   auth: {
     persistSession: false,
-    autoRefreshToken: false, // backend is stateless
+    autoRefreshToken: false,
   },
   global: {
     headers: {
       "X-Client-Name": "AIAERA-Backend",
     },
   },
-  // ✅ Safe fetch with timeout & retry handling
   fetch: async (url, options) => {
+    if (!nativeFetch) {
+      throw new Error(
+        "[Supabase] global.fetch is not available in this Node runtime. Please use Node 18+ or polyfill fetch."
+      );
+    }
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000); // 12s timeout
+    const timeout = setTimeout(() => controller.abort(), 12000);
     try {
-      const response = await fetch(url, { ...options, signal: controller.signal });
+      const response = await nativeFetch(url, { ...options, signal: controller.signal });
       clearTimeout(timeout);
       return response;
     } catch (err) {
-      console.error("[Supabase Fetch Error]", err.message);
+      clearTimeout(timeout);
+      console.error("[Supabase Fetch Error]", err?.message || err);
       throw err;
     }
   },
 });
 
-// ----------------------
-// Default storage bucket for chatbot file uploads
-// ----------------------
 export const BUCKET = SUPABASE_BUCKET || "chatbot-files";
 
-// ----------------------
-// Log initialization (only in development)
-// ----------------------
 if (NODE_ENV !== "production") {
-  console.log("✅ [Supabase] Backend client initialized successfully.");
+  console.log("✅ [Supabase] Backend client initialized.");
   console.log("   URL:", SUPABASE_URL);
   console.log("   Auth Mode:", SUPABASE_SERVICE_ROLE_KEY ? "Service Role Key" : "Anon Key");
 }
+
+export const testConnection = async () => {
+  try {
+    const { data, error } = await supabase
+      .from("chatbots")
+      .select("id, business_info")
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn("[Supabase testConnection] query error:", error.message || error);
+      return { ok: false, error };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    console.error("[Supabase testConnection] unexpected error:", err);
+    return { ok: false, error: err };
+  }
+};
 
 export default supabase;
