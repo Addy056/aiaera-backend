@@ -6,28 +6,20 @@ import morgan from "morgan";
 import helmet from "helmet";
 import compression from "compression";
 
-// ----------------------
 // Routes
-// ----------------------
-import apiRouter from "./routes/index.js";
 import authRouter from "./routes/auth.js";
 import userRouter from "./routes/user.js";
 import leadsRouter from "./routes/leads.js";
 import appointmentsRouter from "./routes/appointments.js";
 import subscriptionsRouter from "./routes/subscriptions.js";
 import paymentWebhookRouter from "./routes/paymentWebhook.js";
-import paymentRouter from "./routes/payment.js"; // ✅ ensure file name matches exactly
+import paymentRouter from "./routes/payment.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
-import chatbotPreviewRouter from "./routes/chatbotPreview.js";
-import chatbotSaveRouter from "./routes/chatbotSave.js";
 import cleanupContextRouter from "./routes/cleanupContext.js";
 
-// ----------------------
 // Middleware
-// ----------------------
-import { requireAuth } from "./middleware/authMiddleware.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -91,12 +83,9 @@ app.get("/", (req, res) => {
 });
 
 // ----------------------
-// Mount Routes (with logging for debugging)
+// Mount all routes
 // ----------------------
 console.log("🚀 Mounting all API routes...");
-
-app.use("/api", apiRouter);
-console.log("✅ /api route active");
 
 app.use("/api/auth", authRouter);
 console.log("✅ /api/auth route active");
@@ -122,39 +111,14 @@ console.log("✅ /api/payment route active");
 app.use("/api/integrations", integrationsRouter);
 console.log("✅ /api/integrations route active");
 
-// ----------------------
-// Chatbot routes
-// ----------------------
-app.use("/api/chatbot", chatbotSaveRouter);
-console.log("✅ /api/chatbot save route active");
+app.use("/api/chatbot", chatbotRouter);
+console.log("✅ /api/chatbot route active");
 
-app.use("/api/chatbot/public", chatbotRouter);
-console.log("✅ /api/chatbot/public route active");
-
-app.use("/api/chatbot/secure", requireAuth, chatbotRouter);
-console.log("✅ /api/chatbot/secure route active");
-
-app.use("/api/chatbot-preview", chatbotPreviewRouter);
-console.log("✅ /api/chatbot-preview route active");
+app.use("/api/embed", embedRouter);
+console.log("✅ /api/embed route active");
 
 app.use("/api/cleanup-context", cleanupContextRouter);
 console.log("🧹 /api/cleanup-context route active");
-
-// ----------------------
-// Embed routes
-// ----------------------
-app.use(
-  "/api/embed",
-  (req, res, next) => {
-    res.removeHeader("X-Frame-Options");
-    res.setHeader("X-Frame-Options", "ALLOWALL");
-    res.setHeader("Content-Security-Policy", "frame-ancestors *");
-    res.setHeader("Cache-Control", "public, max-age=3600");
-    next();
-  },
-  embedRouter
-);
-console.log("✅ /api/embed route active");
 
 // ----------------------
 // Payment Debug Route
