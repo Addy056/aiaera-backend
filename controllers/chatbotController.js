@@ -1,3 +1,4 @@
+// backend/controllers/chatbotController.js
 import supabase from "../config/supabaseClient.js";
 import Groq from "groq-sdk";
 
@@ -7,9 +8,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
    Helper functions
 ------------------------------ */
 const isValidUUID = (id) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    id
-  );
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 
 const safeParseConfig = (cfg) => {
   try {
@@ -35,10 +34,7 @@ const fetchFilesText = async (userId, fileIds) => {
 };
 
 const pickBusinessInfo = (obj = {}) =>
-  obj?.business_info ??
-  obj?.business_description ??
-  obj?.businessInfo ??
-  null;
+  obj?.business_info ?? obj?.business_description ?? obj?.businessInfo ?? null;
 
 /**
  * Builds a safe assistant prompt — hides Calendly/website unless requested.
@@ -66,9 +62,7 @@ const buildAssistantSystemPrompt = (ctx) => {
   }
 
   if (ctx.business_address)
-    lines.push(
-      `Address: ${ctx.business_address} (mention only if asked about location)`
-    );
+    lines.push(`Address: ${ctx.business_address} (mention only if asked about location)`);
 
   if (ctx.location?.latitude && ctx.location?.longitude) {
     lines.push(
@@ -85,8 +79,7 @@ const buildAssistantSystemPrompt = (ctx) => {
       `Calendly Link (share only if user asks to book, schedule, or set appointment): ${ctx.calendly_link}`
     );
 
-  if (ctx.filesText)
-    lines.push(`\n--- REFERENCE FILES ---\n${ctx.filesText}`);
+  if (ctx.filesText) lines.push(`\n--- REFERENCE FILES ---\n${ctx.filesText}`);
 
   lines.push(
     ``,
@@ -173,8 +166,7 @@ export const updateChatbot = async (req, res) => {
     const userId = req.user?.id || req.body.userId;
     const { id } = req.params;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
-    if (!id || !isValidUUID(id))
-      return res.status(400).json({ error: "Invalid chatbot ID" });
+    if (!id || !isValidUUID(id)) return res.status(400).json({ error: "Invalid chatbot ID" });
 
     const payload = shapeChatbotPayload(req.body);
     const { data, error } = await supabase
@@ -185,13 +177,34 @@ export const updateChatbot = async (req, res) => {
       .select("*")
       .single();
 
-    if (error || !data)
-      return res.status(404).json({ error: "Chatbot not found" });
+    if (error || !data) return res.status(404).json({ error: "Chatbot not found" });
 
     return res.json({ chatbot: data });
   } catch (err) {
     console.error("[updateChatbot] error:", err);
     return res.status(500).json({ error: "Failed to update chatbot" });
+  }
+};
+
+export const deleteChatbot = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.body.userId;
+    const { id } = req.params;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!id || !isValidUUID(id)) return res.status(400).json({ error: "Invalid chatbot ID" });
+
+    const { error } = await supabase
+      .from("chatbots")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+    return res.json({ success: true, message: "Chatbot deleted" });
+  } catch (err) {
+    console.error("[deleteChatbot] error:", err);
+    return res.status(500).json({ error: "Failed to delete chatbot" });
   }
 };
 
@@ -201,8 +214,7 @@ export const updateChatbot = async (req, res) => {
 export const retrainChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
-    const { chatbotId, businessInfo, files, websiteUrl, latitude, longitude } =
-      req.body;
+    const { chatbotId, businessInfo, files, websiteUrl, latitude, longitude } = req.body;
 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     if (!chatbotId || !isValidUUID(chatbotId))
@@ -260,6 +272,83 @@ export const retrainChatbot = async (req, res) => {
 };
 
 /* ------------------------------
+   Preview Chatbot (Builder Preview)
+------------------------------ */
+export const previewChat = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.body.userId;
+    const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
+    const incoming = req.body.chatbotConfig || {};
+
+    if (!userId)
+      return res.status(401).json({ success: false, error: "Unauthorized" });
+
+    const { data: chatbotRow } = await supabase
+      .from("chatbots")
+      .select("name, business_info, config")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const dbConfig = safeParseConfig(chatbotRow?.config);
+    const { data: integrations } = await supabase
+      .from("user_integrations")
+      .select("business_address, business_lat, business_lng, calendly_link")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const merged = {
+      name: incoming.name || chatbotRow?.name || "Business",
+      business_info:
+        incoming.business_info ??
+        chatbotRow?.business_info ??
+        "This business provides helpful products and services to its customers.",
+      website_url: incoming.website_url || dbConfig.website_url || null,
+      business_address:
+        incoming.business_address || integrations?.business_address || null,
+      calendly_link:
+        incoming.calendly_link || integrations?.calendly_link || null,
+      location: {
+        latitude:
+          incoming.location?.latitude ??
+          dbConfig?.location?.latitude ??
+          integrations?.business_lat ??
+          null,
+        longitude:
+          incoming.location?.longitude ??
+          dbConfig?.location?.longitude ??
+          integrations?.business_lng ??
+          null,
+      },
+      files: Array.isArray(incoming.files)
+        ? incoming.files
+        : Array.isArray(dbConfig.files)
+        ? dbConfig.files
+        : [],
+    };
+
+    const filesText = await fetchFilesText(userId, merged.files);
+    const systemPrompt = buildAssistantSystemPrompt({ ...merged, filesText });
+
+    const groqMessages = mapToGroqMessages(systemPrompt, messages);
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: groqMessages,
+    });
+
+    const reply =
+      completion?.choices?.[0]?.message?.content ||
+      "I'm here to help with this business.";
+
+    return res.json({ success: true, reply, chatbotConfig: merged });
+  } catch (err) {
+    console.error("[previewChat] error:", err);
+    return res
+      .status(500)
+      .json({ success: false, error: "Failed to generate preview reply" });
+  }
+};
+
+/* ------------------------------
    Public Chatbot (Widget)
 ------------------------------ */
 export const publicChatbot = async (req, res) => {
@@ -270,15 +359,16 @@ export const publicChatbot = async (req, res) => {
     if (!id || !Array.isArray(messages))
       return res.status(400).json({ success: false, error: "Invalid input" });
 
-    // Fetch chatbot & latest info from DB
     const { data: chatbot, error: chatbotErr } = await supabase
       .from("chatbots")
-      .select("user_id, name, business_info, business_description, config")
+      .select("user_id, name, business_info, config")
       .eq("id", id)
       .single();
 
     if (chatbotErr || !chatbot)
-      return res.status(404).json({ success: false, error: "Chatbot not found" });
+      return res
+        .status(404)
+        .json({ success: false, error: "Chatbot not found" });
 
     const cfg = safeParseConfig(chatbot.config);
     const { data: integrations } = await supabase
@@ -287,15 +377,11 @@ export const publicChatbot = async (req, res) => {
       .eq("user_id", chatbot.user_id)
       .maybeSingle();
 
-    // ✅ Always prefer latest business_info from DB
-    const businessInfo =
-      chatbot.business_info?.trim() ||
-      chatbot.business_description?.trim() ||
-      "This business provides helpful products and services to its customers.";
-
     const merged = {
       name: chatbot.name || "Business",
-      business_info: businessInfo,
+      business_info:
+        chatbot.business_info ||
+        "This business provides helpful products and services to its customers.",
       website_url: cfg.website_url || null,
       business_address: cfg.business_address || integrations?.business_address || null,
       calendly_link: cfg.calendly_link || integrations?.calendly_link || null,
@@ -307,13 +393,9 @@ export const publicChatbot = async (req, res) => {
     };
 
     const filesText = await fetchFilesText(chatbot.user_id, merged.files);
-    const systemPrompt = buildAssistantSystemPrompt({
-      ...merged,
-      filesText: filesText || undefined,
-    });
+    const systemPrompt = buildAssistantSystemPrompt({ ...merged, filesText });
 
     const groqMessages = mapToGroqMessages(systemPrompt, messages);
-
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: groqMessages,
@@ -326,6 +408,8 @@ export const publicChatbot = async (req, res) => {
     return res.json({ success: true, reply });
   } catch (err) {
     console.error("[publicChatbot] error:", err);
-    return res.status(500).json({ success: false, error: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal server error" });
   }
 };
