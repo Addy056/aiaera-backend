@@ -73,10 +73,13 @@ const buildAssistantSystemPrompt = (ctx) => {
       `Address (only mention if asked): ${ctx.business_address}`
     );
 
-  if (ctx.location?.latitude && ctx.location?.longitude)
-    lines.push(
-      `Coordinates (only mention if asked about location): ${ctx.location.latitude}, ${ctx.location.longitude}`
-    );
+  if (ctx.location?.latitude && ctx.location?.longitude) {
+  const mapLink = `https://www.google.com/maps?q=${ctx.location.latitude},${ctx.location.longitude}`;
+  lines.push(
+    `Map Location: ${mapLink} (share this link only if the user asks for location or directions)`
+  );
+}
+
 
   // Hide links unless requested
   if (ctx.website_url)
