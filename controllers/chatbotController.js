@@ -1,4 +1,3 @@
-// backend/controllers/chatbotController.js
 import supabase from "../config/supabaseClient.js";
 import Groq from "groq-sdk";
 
@@ -35,40 +34,34 @@ const fetchFilesText = async (userId, fileIds) => {
   return data.map((f) => f.content).filter(Boolean).join("\n---\n");
 };
 
-/**
- * Normalize business info field presence:
- * prefer business_info, then business_description, then businessInfo
- */
 const pickBusinessInfo = (obj = {}) =>
-  obj?.business_info ?? obj?.business_description ?? obj?.businessInfo ?? null;
+  obj?.business_info ??
+  obj?.business_description ??
+  obj?.businessInfo ??
+  null;
 
 /**
- * Build assistant system prompt.
- * Important: don't insert "Not provided" which primes the assistant to ask for info.
- * If description is absent, either omit that line or include a short neutral line.
+ * Builds a safe assistant prompt — hides Calendly/website unless requested.
  */
 const buildAssistantSystemPrompt = (ctx) => {
   const lines = [
     `You are a friendly, neutral AI assistant representing this business.`,
-    `Use only the business information provided below to answer customer questions.`,
-    `Do NOT volunteer addresses, links, or booking details unless the customer asks for them.`,
+    `Use only the information below to answer questions accurately.`,
+    `Never reveal private data or external links unless the customer explicitly asks.`,
     ``,
     `--- BUSINESS INFO ---`,
-    `Business Name: ${ctx.name || "Unknown business"}`,
+    `Business Name: ${ctx.name || "Unnamed business"}`,
   ];
 
-  // Only include a business description if present; otherwise include a short neutral hint.
   if (ctx.business_info) {
     lines.push(`Business Description: ${ctx.business_info}`);
   } else if (ctx.filesText) {
-    // If files were provided but no short description, prefer the files as source.
     lines.push(
-      `Business Description: (Use the reference files below for details about products/services.)`
+      `Business Description: Use the following reference files to understand the business context.`
     );
   } else {
-    // Neutral fallback that does NOT invite the assistant to ask the user for more info.
     lines.push(
-      `Business Description: This business serves customers with products and services relevant to the customer's queries.`
+      `Business Description: This business serves its customers with products or services relevant to their needs.`
     );
   }
 
@@ -83,28 +76,28 @@ const buildAssistantSystemPrompt = (ctx) => {
     );
   }
 
-  // Calendly / website are explicitly hidden unless requested
   if (ctx.website_url)
     lines.push(
-      `Website Link (show ONLY if user asks about website, visit, or online presence): ${ctx.website_url}`
+      `Website Link (share only if user asks about website or visiting): ${ctx.website_url}`
     );
   if (ctx.calendly_link)
     lines.push(
-      `Calendly Link (show ONLY if user asks to book, schedule, or set appointment): ${ctx.calendly_link}`
+      `Calendly Link (share only if user asks to book, schedule, or set appointment): ${ctx.calendly_link}`
     );
 
-  if (ctx.filesText) lines.push(`\n--- Reference Files ---\n${ctx.filesText}`);
+  if (ctx.filesText)
+    lines.push(`\n--- REFERENCE FILES ---\n${ctx.filesText}`);
 
   lines.push(
     ``,
     `--- GUIDELINES ---`,
-    `- Keep responses short, natural, and accurate.`,
-    `- Speak as the assistant of the business, not the owner.`,
-    `- If a user asks for the website, then provide the link.`,
-    `- If a user asks for booking/scheduling, then show the Calendly link.`,
-    `- If a user asks for location, include address or map link.`,
-    `- Never say "you haven't provided info" or ask the user to provide their business description.`,
-    `- Optionally end with a short helpful follow-up (e.g., "Would you like the booking link?").`
+    `- Keep responses short, natural, and professional.`,
+    `- Speak as the assistant for the business, not the owner.`,
+    `- If user asks for website → share website_url.`,
+    `- If user asks for booking → share calendly_link.`,
+    `- If user asks for location → share address/map.`,
+    `- Never say “I don’t have business info.”`,
+    `- End with a short follow-up prompt if relevant (e.g., "Would you like the booking link?").`
   );
 
   return lines.join("\n");
@@ -202,30 +195,8 @@ export const updateChatbot = async (req, res) => {
   }
 };
 
-export const deleteChatbot = async (req, res) => {
-  try {
-    const userId = req.user?.id || req.body.userId;
-    const { id } = req.params;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-    if (!id || !isValidUUID(id))
-      return res.status(400).json({ error: "Invalid chatbot ID" });
-
-    const { error } = await supabase
-      .from("chatbots")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", userId);
-
-    if (error) throw error;
-    return res.json({ success: true, message: "Chatbot deleted" });
-  } catch (err) {
-    console.error("[deleteChatbot] error:", err);
-    return res.status(500).json({ error: "Failed to delete chatbot" });
-  }
-};
-
 /* ------------------------------
-   Retrain chatbot
+   Retrain Chatbot
 ------------------------------ */
 export const retrainChatbot = async (req, res) => {
   try {
@@ -289,136 +260,42 @@ export const retrainChatbot = async (req, res) => {
 };
 
 /* ------------------------------
-   Preview chatbot (Builder Preview)
------------------------------- */
-export const previewChat = async (req, res) => {
-  try {
-    const userId = req.user?.id || req.body.userId;
-    const messages = Array.isArray(req.body.messages) ? req.body.messages : [];
-    const incoming = req.body.chatbotConfig || {};
-
-    if (!userId)
-      return res.status(401).json({ success: false, error: "Unauthorized" });
-
-    const { data: chatbotRow, error: chatbotErr } = await supabase
-      .from("chatbots")
-      .select("name, business_info, business_description, config")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (chatbotErr) {
-      console.warn("[previewChat] failed to fetch chatbot row:", chatbotErr.message || chatbotErr);
-    }
-
-    const dbConfig = safeParseConfig(chatbotRow?.config);
-    const { data: integrations } = await supabase
-      .from("user_integrations")
-      .select("business_address, business_lat, business_lng, calendly_link")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const merged = {
-      name: incoming.name || chatbotRow?.name || "Business",
-      business_info:
-        incoming.business_info ??
-        incoming.business_description ??
-        pickBusinessInfo(chatbotRow) ??
-        null,
-      website_url: incoming.website_url || dbConfig.website_url || null,
-      business_address:
-        incoming.business_address ||
-        dbConfig.business_address ||
-        integrations?.business_address ||
-        null,
-      calendly_link:
-        incoming.calendly_link ||
-        dbConfig.calendly_link ||
-        integrations?.calendly_link ||
-        null,
-      location: {
-        latitude:
-          incoming.location?.latitude ??
-          dbConfig?.location?.latitude ??
-          integrations?.business_lat ??
-          null,
-        longitude:
-          incoming.location?.longitude ??
-          dbConfig?.location?.longitude ??
-          integrations?.business_lng ??
-          null,
-      },
-      files:
-        Array.isArray(incoming.files) && incoming.files.length
-          ? incoming.files
-          : Array.isArray(dbConfig.files)
-          ? dbConfig.files
-          : [],
-    };
-
-    const filesText = await fetchFilesText(userId, merged.files);
-    const systemPrompt = buildAssistantSystemPrompt({
-      ...merged,
-      filesText: filesText || undefined,
-    });
-
-    const groqMessages = mapToGroqMessages(systemPrompt, messages);
-
-    let completion;
-    try {
-      completion = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: groqMessages,
-      });
-    } catch (gErr) {
-      console.error("[previewChat] groq error:", gErr);
-      return res.status(500).json({ success: false, error: "AI generation failed" });
-    }
-
-    const reply =
-      completion?.choices?.[0]?.message?.content ||
-      "I'm here to help with information about this business.";
-
-    return res.json({ success: true, reply, chatbotConfig: merged });
-  } catch (err) {
-    console.error("[previewChat] error:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Failed to generate preview reply",
-    });
-  }
-};
-
-/* ------------------------------
-   Public chatbot (Widget)
+   Public Chatbot (Widget)
 ------------------------------ */
 export const publicChatbot = async (req, res) => {
   try {
     const { id } = req.params;
     const { messages = [] } = req.body;
+
     if (!id || !Array.isArray(messages))
       return res.status(400).json({ success: false, error: "Invalid input" });
 
+    // Fetch chatbot & latest info from DB
     const { data: chatbot, error: chatbotErr } = await supabase
       .from("chatbots")
       .select("user_id, name, business_info, business_description, config")
       .eq("id", id)
       .single();
 
-    if (chatbotErr || !chatbot) {
-      console.warn("[publicChatbot] failed to fetch chatbot:", chatbotErr);
+    if (chatbotErr || !chatbot)
       return res.status(404).json({ success: false, error: "Chatbot not found" });
-    }
 
-    const cfg = safeParseConfig(chatbot?.config);
+    const cfg = safeParseConfig(chatbot.config);
     const { data: integrations } = await supabase
       .from("user_integrations")
       .select("business_address, business_lat, business_lng, calendly_link")
       .eq("user_id", chatbot.user_id)
       .maybeSingle();
 
+    // ✅ Always prefer latest business_info from DB
+    const businessInfo =
+      chatbot.business_info?.trim() ||
+      chatbot.business_description?.trim() ||
+      "This business provides helpful products and services to its customers.";
+
     const merged = {
       name: chatbot.name || "Business",
-      business_info: pickBusinessInfo(chatbot) ?? null,
+      business_info: businessInfo,
       website_url: cfg.website_url || null,
       business_address: cfg.business_address || integrations?.business_address || null,
       calendly_link: cfg.calendly_link || integrations?.calendly_link || null,
@@ -437,16 +314,10 @@ export const publicChatbot = async (req, res) => {
 
     const groqMessages = mapToGroqMessages(systemPrompt, messages);
 
-    let completion;
-    try {
-      completion = await groq.chat.completions.create({
-        model: "llama-3.1-8b-instant",
-        messages: groqMessages,
-      });
-    } catch (gErr) {
-      console.error("[publicChatbot] groq error:", gErr);
-      return res.status(500).json({ success: false, error: "AI generation failed" });
-    }
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
+      messages: groqMessages,
+    });
 
     const reply =
       completion?.choices?.[0]?.message?.content ||
