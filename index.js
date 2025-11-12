@@ -35,7 +35,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ----------------------
-// Trust proxy (Render / Reverse Proxies)
+// Trust proxy (for Render / Reverse Proxies)
 // ----------------------
 app.set("trust proxy", 1);
 
@@ -46,7 +46,7 @@ app.use(
   helmet({
     crossOriginEmbedderPolicy: false,
     contentSecurityPolicy: false,
-    frameguard: false,
+    frameguard: false, // allow embedding chatbot iframes
   })
 );
 app.use(compression());
@@ -74,7 +74,7 @@ app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // ----------------------
-// Logging (for development)
+// Logging (only in development)
 // ----------------------
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
@@ -92,58 +92,32 @@ app.get("/", (req, res) => {
 });
 
 // ----------------------
-// Mount all core routes
+// Mount All Core Routes
 // ----------------------
 console.log("🚀 Mounting all API routes...");
 
 app.use("/api/auth", authRouter);
-console.log("✅ /api/auth route active");
-
 app.use("/api/user", userRouter);
-console.log("✅ /api/user route active");
-
 app.use("/api/leads", leadsRouter);
-console.log("✅ /api/leads route active");
-
 app.use("/api/appointments", appointmentsRouter);
-console.log("✅ /api/appointments route active");
-
 app.use("/api/subscriptions", subscriptionsRouter);
-console.log("✅ /api/subscriptions route active");
-
 app.use("/api/payment-webhook", paymentWebhookRouter);
-console.log("✅ /api/payment-webhook route active");
-
 app.use("/api/payment", paymentRouter);
-console.log("✅ /api/payment route active");
-
 app.use("/api/integrations", integrationsRouter);
-console.log("✅ /api/integrations route active");
-
-app.use("/api/chatbot", chatbotRouter);
-console.log("✅ /api/chatbot route active");
-
+app.use("/api/chatbot", chatbotRouter); // ✅ includes /public and /config routes
 app.use("/api/embed", embedRouter);
-console.log("✅ /api/embed route active");
-
 app.use("/api/cleanup-context", cleanupContextRouter);
-console.log("🧹 /api/cleanup-context route active");
+
+console.log("✅ All core routes active");
 
 // ----------------------
-// 🆕 Webhooks (Meta Platforms)
+// Webhooks (Meta Platforms)
 // ----------------------
-
-// WhatsApp Webhook (dynamic per-user token handling)
 app.use("/api/webhooks/whatsapp", whatsappWebhookRouter);
-console.log("💬 /api/webhooks/whatsapp route active");
-
-// Facebook Messenger Webhook
 app.use("/api/webhooks/facebook", facebookWebhookRouter);
-console.log("💬 /api/webhooks/facebook route active");
-
-// Instagram Messaging Webhook
 app.use("/api/webhooks/instagram", instagramWebhookRouter);
-console.log("📸 /api/webhooks/instagram route active");
+
+console.log("💬 Webhook routes active (WhatsApp, Facebook, Instagram)");
 
 // ----------------------
 // Payment Debug Route
@@ -175,7 +149,7 @@ app.use(errorHandler);
 // ----------------------
 app.listen(PORT, () => {
   console.log(`🚀 AIAERA backend running on port ${PORT}`);
-  console.log("✅ All core and webhook routes initialized successfully.");
+  console.log("✅ All core, webhook, and chatbot routes initialized successfully.");
 });
 
 export default app;
