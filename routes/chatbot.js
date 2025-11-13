@@ -20,83 +20,98 @@ const router = express.Router();
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-/* ------------------------------
-   🔹 Public chatbot route (for deployed widgets)
-   Example: POST /api/chatbot/public/:id
------------------------------- */
+/* ============================================================
+   🔹 PUBLIC CHATBOT MESSAGE ROUTE
+   POST /api/chatbot/public/:id
+============================================================ */
 router.post(
   "/public/:id",
   asyncHandler(async (req, res) => {
-    await publicChatbot(req, res);
+    res.setHeader("Content-Type", "application/json");
+
+    try {
+      await publicChatbot(req, res);
+    } catch (error) {
+      console.error("🔥 Public chatbot error:", error);
+      return res.status(500).json({
+        error: "Chatbot failed to process your request",
+      });
+    }
   })
 );
 
-/* ------------------------------
-   🔹 NEW: Public chatbot config route
-   Example: GET /api/chatbot/config/:id
-   Returns chatbot details for /public-chatbot/:id
------------------------------- */
+/* ============================================================
+   🔹 PUBLIC CHATBOT CONFIG ROUTE
+   GET /api/chatbot/config/:id
+   Ensures pure JSON → prevents iframe fallback HTML
+============================================================ */
 router.get(
   "/config/:id",
   asyncHandler(async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+
     const { id } = req.params;
 
-    // Fetch chatbot details
+    // Fetch chatbot from DB
     const { data: chatbot, error } = await supabase
       .from("chatbots")
-      .select("id, name, business_info, config")
+      .select("id, name, business_info, welcome_message, config")
       .eq("id", id)
       .single();
 
+    // Handle missing chatbot
     if (error || !chatbot) {
-      console.error("Chatbot not found or Supabase error:", error);
+      console.error("❌ Chatbot not found:", error);
       return res.status(404).json({ error: "Chatbot not found" });
     }
 
-    // Parse chatbot config safely
+    // Parse config safely
     let configData = {};
     try {
       configData =
         typeof chatbot.config === "string"
           ? JSON.parse(chatbot.config)
           : chatbot.config || {};
-    } catch {
+    } catch (e) {
+      console.error("Config parse error:", e);
       configData = {};
     }
 
-    // Build response
+    // Build final JSON response
     const response = {
       id: chatbot.id,
       name: chatbot.name || "AI Chatbot",
       business_info: chatbot.business_info || "",
+      welcome_message:
+        chatbot.welcome_message ||
+        configData.welcome_message ||
+        "Hi! How may I help you?",
       logo_url: configData.logo_url || "",
       themeColors: configData.themeColors || { userBubble: "#7f5af0" },
       website_url: configData.website_url || "",
       files: configData.files || [],
+      sources: configData.sources || {},
     };
 
-    return res.json(response);
+    return res.status(200).json(response);
   })
 );
 
-/* ------------------------------
-   🔹 Preview chatbot (Builder Preview)
-   Example: POST /api/chatbot/preview
------------------------------- */
+/* ============================================================
+   🔹 PREVIEW ROUTE (BUILDER PAGE)
+============================================================ */
 router.post("/preview", asyncHandler(previewChat));
 
-/* ------------------------------
-   🔒 Protected Routes (Require Auth)
------------------------------- */
+/* ============================================================
+   🔒 PROTECTED ROUTES (USER LOGGED IN)
+============================================================ */
 router.use(requireAuth);
 
-/* --- CRUD Routes --- */
 router.post("/", asyncHandler(createChatbot));
 router.get("/", asyncHandler(getUserChatbots));
 router.put("/:id", asyncHandler(updateChatbot));
 router.delete("/:id", asyncHandler(deleteChatbot));
 
-/* --- Retrain Chatbot --- */
 router.post(
   "/retrain",
   asyncHandler(async (req, res) => {
