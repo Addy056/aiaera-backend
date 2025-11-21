@@ -52,7 +52,7 @@ const buildAssistantSystemPrompt = (ctx) => {
     `Business Name: ${ctx.name || "Our Business"}`,
   ];
 
-  // Business description
+  // Business description logic
   if (ctx.business_info?.trim()) {
     lines.push(`Business Description: ${ctx.business_info}`);
   } else if (ctx.filesText?.length > 0) {
@@ -60,38 +60,24 @@ const buildAssistantSystemPrompt = (ctx) => {
       `Business Description: Use the reference file data to inform your answers.`
     );
   } else {
-    lines.push(
-      `Business Description: We help customers with our products and services.`
-    );
+    lines.push(`Business Description: We help customers with our products and services.`);
   }
 
-  // Address
   if (ctx.business_address)
-    lines.push(
-      `Address (ONLY mention if user asks): ${ctx.business_address}`
-    );
+    lines.push(`Address (ONLY mention if user asks): ${ctx.business_address}`);
 
   // Google Maps link
   if (ctx.location?.latitude && ctx.location?.longitude) {
     const mapLink = `https://www.google.com/maps?q=${ctx.location.latitude},${ctx.location.longitude}`;
-    lines.push(
-      `Map Link (ONLY if user asks for directions): ${mapLink}`
-    );
+    lines.push(`Map Link (ONLY if user asks for directions): ${mapLink}`);
   }
 
-  // Website
   if (ctx.website_url)
-    lines.push(
-      `Website (ONLY mention if asked): ${ctx.website_url}`
-    );
+    lines.push(`Website (ONLY mention if asked): ${ctx.website_url}`);
 
-  // Calendly
   if (ctx.calendly_link)
-    lines.push(
-      `Calendly Scheduler (ONLY mention if asked): ${ctx.calendly_link}`
-    );
+    lines.push(`Calendly Scheduler (ONLY mention if asked): ${ctx.calendly_link}`);
 
-  // File data
   if (ctx.filesText?.length > 0)
     lines.push(`\n--- REFERENCE FILES ---\n${ctx.filesText}`);
 
@@ -117,7 +103,7 @@ const mapToGroqMessages = (systemPrompt, messages) => [
 ];
 
 /* ------------------------------
-   UNIFIED NORMALIZER
+   CONFIG NORMALIZER
 ------------------------------ */
 const normalizeChatbotConfig = (chatbot, integrations) => {
   const cfg = safeParseConfig(chatbot?.config);
@@ -132,34 +118,19 @@ const normalizeChatbotConfig = (chatbot, integrations) => {
       cfg.businessDescription ||
       "We help customers with our services.",
 
-    welcome_message:
-      cfg.welcome_message ||
-      "Hello! How can we assist you today?",
+    welcome_message: cfg.welcome_message || "Hello! How can we assist you today?",
 
-    website_url:
-      cfg.website_url ||
-      cfg.businessWebsite ||
-      null,
+    website_url: cfg.website_url || cfg.businessWebsite || null,
 
-    business_address:
-      cfg.business_address ||
-      integrations?.business_address ||
-      null,
+    business_address: cfg.business_address || integrations?.business_address || null,
 
-    calendly_link:
-      cfg.calendly_link ||
-      integrations?.calendly_link ||
-      null,
+    calendly_link: cfg.calendly_link || integrations?.calendly_link || null,
 
     location: {
       latitude:
-        integrations?.business_lat ??
-        cfg?.location?.latitude ??
-        null,
+        integrations?.business_lat ?? cfg?.location?.latitude ?? null,
       longitude:
-        integrations?.business_lng ??
-        cfg?.location?.longitude ??
-        null,
+        integrations?.business_lng ?? cfg?.location?.longitude ?? null,
     },
 
     files: Array.isArray(cfg.files) ? cfg.files : [],
@@ -169,13 +140,12 @@ const normalizeChatbotConfig = (chatbot, integrations) => {
 };
 
 /* ------------------------------
-   CRUD EXPORTS
+   CREATE CHATBOT
 ------------------------------ */
 export const createChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
-    if (!userId)
-      return res.status(401).json({ error: "Unauthorized" });
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
     const payload = {
       name: req.body.name || null,
@@ -202,6 +172,9 @@ export const createChatbot = async (req, res) => {
   }
 };
 
+/* ------------------------------
+   UPDATE CHATBOT
+------------------------------ */
 export const updateChatbot = async (req, res) => {
   try {
     const userId = req.user?.id || req.body.userId;
@@ -240,7 +213,37 @@ export const updateChatbot = async (req, res) => {
 };
 
 /* ------------------------------
-   GET CONFIG (for iframe)
+   DELETE CHATBOT  (ADDED)
+------------------------------ */
+export const deleteChatbot = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.body.userId;
+    const { id } = req.params;
+
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    if (!isValidUUID(id))
+      return res.status(400).json({ error: "Invalid ID" });
+
+    const { error } = await supabase
+      .from("chatbots")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      message: "Chatbot deleted successfully",
+    });
+  } catch (err) {
+    console.error("deleteChatbot error:", err);
+    res.status(500).json({ error: "Failed to delete chatbot" });
+  }
+};
+
+/* ------------------------------
+   PUBLIC GET (for iframe)
 ------------------------------ */
 export const getPublicChatbotConfig = async (req, res) => {
   try {
@@ -305,20 +308,14 @@ export const publicChatbot = async (req, res) => {
 
     const merged = normalizeChatbotConfig(chatbot, integ);
 
-    const filesText = await fetchFilesText(
-      chatbot.user_id,
-      merged.files
-    );
+    const filesText = await fetchFilesText(chatbot.user_id, merged.files);
 
     const systemPrompt = buildAssistantSystemPrompt({
       ...merged,
       filesText,
     });
 
-    const groqMessages = mapToGroqMessages(
-      systemPrompt,
-      messages
-    );
+    const groqMessages = mapToGroqMessages(systemPrompt, messages);
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
