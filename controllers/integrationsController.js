@@ -1,8 +1,9 @@
+// backend/controllers/metaController.js
 import axios from "axios";
 import supabase from "../config/supabaseClient.js";
 
 /* ------------------------------------------------------
- * 1) META WEBHOOK VERIFICATION
+ * 1) META WEBHOOK VERIFICATION  (WhatsApp, IG, FB)
  * ------------------------------------------------------ */
 export const verifyMetaWebhook = (req, res) => {
   try {
@@ -12,82 +13,173 @@ export const verifyMetaWebhook = (req, res) => {
     const challenge = req.query["hub.challenge"];
 
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("✅ Meta webhook verified");
       return res.status(200).send(challenge);
     }
-    console.warn("⚠️ Meta webhook verification failed");
+
     return res.sendStatus(403);
   } catch (err) {
-    console.error("❌ Meta webhook verification error:", err.message);
+    console.error("❌ Meta verify error:", err);
     return res.sendStatus(500);
   }
 };
 
 /* ------------------------------------------------------
- * 2) HANDLE META (WA/FB/IG) MESSAGES
+ * 2) WHATSAPP + FACEBOOK + INSTAGRAM (Multi-Channel Handler)
  * ------------------------------------------------------ */
 export const handleMetaWebhook = async (req, res, next) => {
   try {
     const entry = req.body?.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
-    const messages = value?.messages;
 
-    if (!messages?.length) return res.sendStatus(200);
+    /* ----------------------------------------
+       2A) Detect Messaging Product
+    ---------------------------------------- */
+    const product = value?.messaging_product;
 
-    const msg = messages[0];
-    const from = msg?.from;
-    const text =
-      msg?.text?.body ||
-      msg?.message?.text ||
-      msg?.message ||
-      "No message";
-
-    const phoneNumberId = value?.metadata?.phone_number_id;
-    if (!phoneNumberId) return res.sendStatus(200);
-
-    // 🔍 Lookup by WhatsApp number id
-    const { data: integration, error: fetchError } = await supabase
-      .from("user_integrations")
-      .select("*")
-      .eq("whatsapp_number", phoneNumberId)
-      .maybeSingle();
-
-    if (fetchError || !integration) return res.sendStatus(200);
-
-    const safeText = (text || "").toLowerCase();
-    const wantsAppointment = ["book", "schedule", "appointment", "meeting", "call", "demo", "consultation"]
-      .some((k) => safeText.includes(k));
-
-    let replyText = `Thanks for your message: "${text}"`;
-    if (wantsAppointment && integration.calendly_link) {
-      let clean = integration.calendly_link.trim();
-      if (!/^https?:\/\//i.test(clean)) clean = "https://" + clean;
-      replyText = `Hi 👋 Book a time here: ${clean}`;
-    } else if (wantsAppointment && !integration.calendly_link) {
-      replyText = "We don’t have a booking link set yet. Please check back later or contact us directly!";
-    } else if (integration.business_address) {
-      replyText = `📍 Our business location: ${integration.business_address}`;
+    if (!product) {
+      return res.sendStatus(200);
     }
 
-    const token =
-      integration.whatsapp_token ||
-      integration.fb_page_token ||
-      integration.instagram_access_token;
+    /* --------------------------------------------------
+       2B) WHATSAPP FORMAT
+       (value.messages[0].from / text.body)
+    -------------------------------------------------- */
+    if (product === "whatsapp") {
+      const msg = value?.messages?.[0];
+      if (!msg) return res.sendStatus(200);
 
-    if (!token) return res.sendStatus(200);
+      const from = msg.from;
+      const text = msg.text?.body || "";
+      const messageId = msg.id;
+      const phoneId = value.metadata?.phone_number_id;
 
-    await axios.post(
-      `https://graph.facebook.com/v17.0/${phoneNumberId}/messages`,
-      {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: replyText },
-      },
-      { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
-    );
+      if (!phoneId || !from) return res.sendStatus(200);
 
-    console.log(`✅ Auto-replied to ${from}`);
+      /** Avoid duplicates */
+      const { data: exists } = await supabase
+        .from("messages_handled")
+        .select("message_id")
+        .eq("message_id", messageId)
+        .maybeSingle();
+
+      if (exists) return res.sendStatus(200);
+
+      /** Find owner by phone_number_id */
+      const { data: integration } = await supabase
+        .from("user_integrations")
+        .select("*")
+        .eq("whatsapp_number", phoneId)
+        .maybeSingle();
+
+      if (!integration) return res.sendStatus(200);
+
+      const reply = await generateWhatsAppReply(text, integration);
+
+      await axios.post(
+        `https://graph.facebook.com/v17.0/${phoneId}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to: from,
+          text: { body: reply },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${integration.whatsapp_token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      /** Mark message handled */
+      await supabase
+        .from("messages_handled")
+        .insert([{ message_id: messageId, user_id: integration.user_id }]);
+
+      return res.sendStatus(200);
+    }
+
+    /* --------------------------------------------------
+       2C) FACEBOOK / INSTAGRAM FORMAT
+       (value.messages[0] under "messaging" OR "messages")
+    -------------------------------------------------- */
+
+    // IG + FB messenger can come under value.messages OR entry.messaging
+    const msg =
+      value?.messages?.[0] ||
+      entry?.messaging?.[0] ||
+      null;
+
+    if (!msg) return res.sendStatus(200);
+
+    const senderId = msg.from || msg.sender?.id || null;
+    const text =
+      msg?.text?.body ||
+      msg?.text ||
+      msg?.message?.text ||
+      "";
+
+    const messageId = msg.id || msg.mid;
+
+    if (!senderId || !messageId) return res.sendStatus(200);
+
+    /** Avoid duplicates */
+    const { data: exists } = await supabase
+      .from("messages_handled")
+      .select("message_id")
+      .eq("message_id", messageId)
+      .maybeSingle();
+
+    if (exists) return res.sendStatus(200);
+
+    /* ---- Identify User ---- */
+    const pageId = entry.id;
+
+    const { data: user } = await supabase
+      .from("user_integrations")
+      .select("*")
+      .or(
+        `fb_page_id.eq.${pageId},instagram_user_id.eq.${pageId}`
+      )
+      .maybeSingle();
+
+    if (!user) return res.sendStatus(200);
+
+    const aiReply = await generateAIReply(user.user_id, text);
+
+    /* ---- Send FB Message ---- */
+    if (product === "facebook") {
+      await axios.post(
+        `https://graph.facebook.com/v17.0/me/messages?access_token=${user.fb_page_token}`,
+        {
+          recipient: { id: senderId },
+          message: { text: aiReply },
+        }
+      );
+    }
+
+    /* ---- Send IG DM ---- */
+    if (product === "instagram") {
+      await axios.post(
+        `https://graph.facebook.com/v17.0/${user.instagram_user_id}/messages`,
+        {
+          recipient: senderId,
+          message: { text: aiReply },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${user.instagram_access_token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    /* Mark handled */
+    await supabase
+      .from("messages_handled")
+      .insert([{ message_id: messageId, user_id: user.user_id }]);
+
     return res.sendStatus(200);
   } catch (err) {
     console.error("❌ handleMetaWebhook error:", err);
@@ -96,71 +188,98 @@ export const handleMetaWebhook = async (req, res, next) => {
 };
 
 /* ------------------------------------------------------
- * 3) CALENDLY WEBHOOK (NEW APPOINTMENTS)
+ * 3) HELPER — SIMPLE CALENDLY AUTO-RESPONSE
  * ------------------------------------------------------ */
-export const handleCalendlyWebhook = async (req, res, next) => {
-  try {
-    const event = req.body;
-    if (event?.event === "invitee.created") {
-      const invitee = event.payload?.invitee;
-      const eventLink = event.payload?.event?.uri;
-      const name = invitee?.name || "Guest";
-      const email = invitee?.email || null;
+async function generateWhatsAppReply(text, integration) {
+  const safe = text.toLowerCase();
 
-      let bookingLink = event.payload?.event?.event_type?.scheduling_url || "";
-      if (typeof bookingLink === "string") {
-        bookingLink = bookingLink.trim();
-        if (bookingLink && !/^https?:\/\//i.test(bookingLink)) {
-          bookingLink = "https://" + bookingLink;
-        }
-      }
-
-      const { data: integration } = await supabase
-        .from("user_integrations")
-        .select("*")
-        .eq("calendly_link", bookingLink)
-        .maybeSingle();
-
-      if (integration) {
-        await supabase.from("appointments").insert([
-          {
-            user_id: integration.user_id,
-            customer_name: name,
-            customer_email: email,
-            calendly_event_link: eventLink || bookingLink || null,
-          },
-        ]);
-        console.log(`✅ Appointment saved for ${name}`);
-      }
+  // Appointment intent
+  const trigger = ["book", "meeting", "schedule", "appointment", "demo"];
+  if (trigger.some((k) => safe.includes(k))) {
+    if (integration.calendly_link) {
+      return `📅 Book a meeting:\n${integration.calendly_link}`;
     }
+    return `We don't have a booking link yet. Please contact us directly.`;
+  }
+
+  // Business address
+  if (integration.business_address) {
+    return `📍 Our address:\n${integration.business_address}`;
+  }
+
+  return `Thanks for messaging us! How can we help you?`;
+}
+
+/* ------------------------------------------------------
+ * 4) CALENDLY WEBHOOK (MAPS TO user_integrations)
+ * ------------------------------------------------------ */
+export const handleCalendlyWebhook = async (req, res) => {
+  try {
+    const body = req.body;
+
+    if (body?.event !== "invitee.created") {
+      return res.sendStatus(200);
+    }
+
+    const invitee = body.payload?.invitee;
+    const eventUrl = body.payload?.event?.uri;
+    let schedulingUrl =
+      body.payload?.event?.event_type?.scheduling_url || "";
+
+    schedulingUrl = schedulingUrl.trim();
+    if (schedulingUrl && !/^https?:\/\//i.test(schedulingUrl)) {
+      schedulingUrl = "https://" + schedulingUrl;
+    }
+
+    // Find which user owns this Calendly link
+    const { data: owner } = await supabase
+      .from("user_integrations")
+      .select("*")
+      .eq("calendly_link", schedulingUrl)
+      .maybeSingle();
+
+    if (!owner) return res.sendStatus(404);
+
+    await supabase
+      .from("appointments")
+      .insert([
+        {
+          user_id: owner.user_id,
+          customer_name: invitee?.name,
+          customer_email: invitee?.email,
+          calendly_event_link: schedulingUrl,
+        },
+      ]);
+
     return res.sendStatus(200);
   } catch (err) {
-    console.error("❌ handleCalendlyWebhook error:", err);
-    return next(err);
+    console.error("❌ Calendly webhook error:", err);
+    return res.sendStatus(500);
   }
 };
 
 /* ------------------------------------------------------
- * 4) SAVE INTEGRATIONS (SAFE + ROBUST)
+ * 5) SAVE INTEGRATIONS (CLEAN + SAFE)
  * ------------------------------------------------------ */
 export const saveIntegrations = async (req, res) => {
   try {
-    let { user_id, ...integrationData } = req.body;
-    if (!user_id)
-      return res.status(400).json({ success: false, error: "Missing user_id" });
+    let { user_id, ...payload } = req.body;
 
-    // ✅ Clean UUID format
-    user_id = String(user_id).replace(/[<>]/g, "").trim();
+    if (!user_id)
+      return res
+        .status(400)
+        .json({ success: false, error: "Missing user_id" });
+
+    user_id = String(user_id).trim();
 
     const allowed = [
       "whatsapp_number",
       "whatsapp_token",
       "fb_page_id",
       "fb_page_token",
-      "calendly_link",
       "instagram_user_id",
-      "instagram_page_id",
       "instagram_access_token",
+      "calendly_link",
       "business_address",
       "business_lat",
       "business_lng",
@@ -168,99 +287,68 @@ export const saveIntegrations = async (req, res) => {
 
     const filtered = {};
     for (const key of allowed) {
-      if (integrationData[key] !== undefined && integrationData[key] !== null && integrationData[key] !== "") {
-        filtered[key] = integrationData[key];
+      if (payload[key] !== undefined && payload[key] !== "") {
+        filtered[key] = payload[key];
       }
     }
 
-    // ✅ Auto-clean Calendly link
+    // Clean Calendly link
     if (filtered.calendly_link) {
-      filtered.calendly_link = String(filtered.calendly_link).replace(/<[^>]*>/g, "").trim();
+      filtered.calendly_link = filtered.calendly_link.trim();
       if (!/^https?:\/\//i.test(filtered.calendly_link)) {
         filtered.calendly_link = "https://" + filtered.calendly_link;
       }
     }
 
-    filtered.updated_at = new Date().toISOString();
-
-    // ✅ Upsert with safety logging
     const { data, error } = await supabase
       .from("user_integrations")
-      .upsert([{ user_id, ...filtered }], { onConflict: "user_id" })
+      .upsert([{ user_id, ...filtered }], {
+        onConflict: "user_id",
+      })
       .select()
       .maybeSingle();
 
     if (error) {
-      console.error("❌ Supabase upsert error:", error);
       return res.status(500).json({
         success: false,
-        error: "Database error while saving integration",
-        details: error?.message || JSON.stringify(error),
+        error: "Failed to save integration",
+        details: error.message,
       });
     }
 
-    console.log(`✅ Integration saved for user ${user_id}`);
     return res.json({
       success: true,
-      message: "Integration saved successfully",
-      data: data || {},
+      data,
+      message: "Integrations saved",
     });
   } catch (err) {
-    console.error("❌ Unexpected error saving integration:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Unexpected error saving integration",
-      details: err.message,
-    });
+    console.error("❌ saveIntegrations error:", err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 };
 
 /* ------------------------------------------------------
- * 5) GET INTEGRATIONS (SAFE / PARTIAL)
+ * 6) GET INTEGRATIONS
  * ------------------------------------------------------ */
 export const getIntegrations = async (req, res) => {
   try {
-    let { user_id } = req.query;
-    user_id = String(user_id || "").replace(/[<>]/g, "").trim();
-    if (!user_id)
-      return res.status(400).json({ success: false, error: "Missing user_id" });
+    const { user_id } = req.query;
 
-    const { data, error } = await supabase
+    if (!user_id)
+      return res.status(400).json({ error: "Missing user_id" });
+
+    const { data } = await supabase
       .from("user_integrations")
       .select("*")
       .eq("user_id", user_id)
       .maybeSingle();
 
-    if (error) {
-      console.error("❌ Supabase fetch error:", error);
-      return res.status(500).json({
-        success: false,
-        error: "Failed to fetch integrations",
-        details: error?.message || JSON.stringify(error),
-      });
-    }
-
-    // ✅ Ignore null/empty fields
-    const safeData = {};
-    if (data) {
-      Object.entries(data).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== "") safeData[key] = value;
-      });
-    }
-
     return res.json({
       success: true,
-      data: safeData,
-      message: Object.keys(safeData).length
-        ? "Integrations fetched successfully"
-        : "No integrations found for this user",
+      data: data || {},
     });
   } catch (err) {
-    console.error("❌ getIntegrations unexpected error:", err);
-    return res.status(500).json({
-      success: false,
-      error: "Unexpected error fetching integrations",
-      details: err.message,
-    });
+    console.error("❌ getIntegrations error:", err);
+    res.status(500).json({ error: err.message });
   }
 };

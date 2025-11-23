@@ -4,57 +4,66 @@ import { createOrder, verifyPayment } from "../controllers/paymentController.js"
 
 const router = express.Router();
 
-/**
- * ------------------------------------------------------
- * ✅ Payment Routes (Razorpay)
- * ------------------------------------------------------
- * Mounted at: /api/payment
- * Example endpoints:
- *   POST /api/payment/create-order
- *   POST /api/payment/verify-payment
- *   GET  /api/payment/ping  ← health check
- * ------------------------------------------------------
- */
+/* ------------------------------------------------------
+   Async wrapper to cleanly catch errors
+------------------------------------------------------ */
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
 
-// Simple test route to verify connection
+/* ------------------------------------------------------
+   HEALTH CHECK
+   /api/payment/ping
+------------------------------------------------------ */
 router.get("/ping", (req, res) => {
-  console.log("✅ /api/payment/ping called");
-  res.json({ success: true, message: "Payment routes are active" });
+  res.json({
+    success: true,
+    message: "Payment routes are active",
+  });
 });
 
-// Create Razorpay order
-router.post("/create-order", async (req, res, next) => {
-  try {
-    console.log("💳 POST /api/payment/create-order hit with body:", req.body);
-    await createOrder(req, res);
-  } catch (err) {
-    console.error("❌ Error in POST /api/payment/create-order:", err.stack || err.message);
-    next(err);
-  }
+/* ------------------------------------------------------
+   CREATE RAZORPAY ORDER
+   POST /api/payment/create-order
+------------------------------------------------------ */
+router.post(
+  "/create-order",
+  asyncHandler(async (req, res) => {
+    console.log("💳 [Payment] Create order request:", req.body);
+    return createOrder(req, res);
+  })
+);
+
+/* ------------------------------------------------------
+   VERIFY RAZORPAY PAYMENT
+   POST /api/payment/verify-payment
+------------------------------------------------------ */
+router.post(
+  "/verify-payment",
+  asyncHandler(async (req, res) => {
+    console.log("🧾 [Payment] Verify payment request:", req.body);
+    return verifyPayment(req, res);
+  })
+);
+
+/* ------------------------------------------------------
+   CATCH-ALL for invalid subroutes
+------------------------------------------------------ */
+router.all("*", (req, res) => {
+  console.warn(`⚠️ Invalid payment route accessed: ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    error: "Invalid payment route",
+  });
 });
 
-// Verify Razorpay payment
-router.post("/verify-payment", async (req, res, next) => {
-  try {
-    console.log("🧾 POST /api/payment/verify-payment hit with body:", req.body);
-    await verifyPayment(req, res);
-  } catch (err) {
-    console.error("❌ Error in POST /api/payment/verify-payment:", err.stack || err.message);
-    next(err);
-  }
-});
-
-/**
- * ------------------------------------------------------
- * Global Error Handling for Payment Routes
- * ------------------------------------------------------
- */
+/* ------------------------------------------------------
+   GLOBAL PAYMENT ROUTE ERROR HANDLER
+------------------------------------------------------ */
 router.use((err, req, res, next) => {
-  console.error("❌ Payment route unhandled error:", err.stack || err.message);
+  console.error("❌ Payment Route Error:", err.message);
   res.status(500).json({
     success: false,
     error: "Internal server error in payment route",
-    message: err.message || "Unexpected error",
   });
 });
 

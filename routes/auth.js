@@ -6,16 +6,23 @@ const router = express.Router();
 
 /**
  * @route   POST /api/auth/signup
- * @desc    Register a new user
+ * @desc    Register a new user (Supabase Admin API)
  * @access  Public
  */
 router.post("/signup", signup);
 
 /**
  * @route   POST /api/auth/login
- * @desc    Authenticate user & get token
- * @access  Public
+ * @desc    Disabled — Login must be handled via Supabase client on frontend
+ * @access  Public (but always returns 400)
  */
-router.post("/login", login);
+router.post("/login", (req, res) => {
+  console.warn("⚠️ Backend login attempt blocked:", {
+    ip: req.ip,
+    email: req.body?.email
+  });
+
+  return login(req, res);
+});
 
 export default router;

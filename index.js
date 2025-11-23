@@ -19,69 +19,68 @@ import paymentRouter from "./routes/payment.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
+import chatbotStream from "./routes/chatbotStream.js"; // ⭐ NEW STREAM ROUTE
 import cleanupContextRouter from "./routes/cleanupContext.js";
 
-// 🆕 Webhook routes (Meta Platforms)
+// 🆕 External Webhooks (Meta)
 import whatsappWebhookRouter from "./routes/webhooks/whatsapp.js";
 import facebookWebhookRouter from "./routes/webhooks/facebook.js";
 import instagramWebhookRouter from "./routes/webhooks/instagram.js";
 
-// ----------------------
-// Middleware
-// ----------------------
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ----------------------
-// Trust proxy (for Render / Reverse Proxies)
+// Reverse proxy (Render)
 // ----------------------
 app.set("trust proxy", 1);
 
 // ----------------------
-// Security & Performance Middleware
+// Security & Performance
 // ----------------------
 app.use(
   helmet({
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false,
-    frameguard: false, // allow embedding chatbot iframes
+    contentSecurityPolicy: false, // required for iframe + SSE
+    crossOriginResourcePolicy: false,
+    frameguard: false, // allow embedding chatbot on other domains
   })
 );
+
 app.use(compression());
 
 // ----------------------
-// CORS Configuration
+// CORS (safe multi-domain mode)
 // ----------------------
 app.use(
   cors({
-    origin: (origin, callback) => callback(null, true),
+    origin: "*", // ANY DOMAIN CAN EMBED IFRAME
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 // ----------------------
-// Razorpay Webhook (raw body parsing first!)
+// Razorpay webhook (raw body)
 // ----------------------
 app.use("/api/payment-webhook", express.raw({ type: "*/*" }));
 
 // ----------------------
-// JSON & URL-encoded body parsing
+// JSON parser (after raw)
 // ----------------------
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // ----------------------
-// Logging (only in development)
+// Logging
 // ----------------------
 if (process.env.NODE_ENV !== "production") {
   app.use(morgan("dev"));
 }
 
 // ----------------------
-// Health check route
+// Health route
 // ----------------------
 app.get("/", (req, res) => {
   res.json({
@@ -92,9 +91,9 @@ app.get("/", (req, res) => {
 });
 
 // ----------------------
-// Mount All Core Routes
+// Mount CORE Routes
 // ----------------------
-console.log("🚀 Mounting all API routes...");
+console.log("🚀 Mounting all core API routes...");
 
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
@@ -104,34 +103,36 @@ app.use("/api/subscriptions", subscriptionsRouter);
 app.use("/api/payment-webhook", paymentWebhookRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/integrations", integrationsRouter);
-app.use("/api/chatbot", chatbotRouter); // ✅ includes /public and /config routes
-app.use("/api/embed", embedRouter);
 app.use("/api/cleanup-context", cleanupContextRouter);
 
-console.log("✅ All core routes active");
+app.use("/api/embed", embedRouter);
 
 // ----------------------
-// Webhooks (Meta Platforms)
+// Chatbot Main Routes
+// ----------------------
+app.use("/api/chatbot", chatbotRouter);
+
+// ----------------------
+// 🚀 STREAMING ROUTE (must be before 404 handler)
+// ----------------------
+app.use("/api/chatbot", chatbotStream);
+
+console.log("💬 Chatbot + Stream routes active");
+
+// ----------------------
+// Meta Webhooks
 // ----------------------
 app.use("/api/webhooks/whatsapp", whatsappWebhookRouter);
 app.use("/api/webhooks/facebook", facebookWebhookRouter);
 app.use("/api/webhooks/instagram", instagramWebhookRouter);
 
-console.log("💬 Webhook routes active (WhatsApp, Facebook, Instagram)");
+console.log("📡 WhatsApp/Facebook/Instagram webhooks active");
 
 // ----------------------
-// Payment Debug Route
-// ----------------------
-app.get("/api/payment/ping", (req, res) => {
-  console.log("✅ /api/payment/ping called");
-  res.json({ success: true, message: "Payment route is active and healthy" });
-});
-
-// ----------------------
-// 404 handler
+// 404 Handler
 // ----------------------
 app.use((req, res) => {
-  console.warn(`⚠️ 404 Route not found: ${req.originalUrl}`);
+  console.warn(`⚠️ 404 Not Found: ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     error: "Route not found",
@@ -149,7 +150,7 @@ app.use(errorHandler);
 // ----------------------
 app.listen(PORT, () => {
   console.log(`🚀 AIAERA backend running on port ${PORT}`);
-  console.log("✅ All core, webhook, and chatbot routes initialized successfully.");
+  console.log("✅ All routes loaded successfully");
 });
 
 export default app;

@@ -1,69 +1,168 @@
 // backend/controllers/embedController.js
-import supabase from '../config/supabaseClient.js';
-import { handleError } from '../utils/errorHandler.js';
+import supabase from "../config/supabaseClient.js";
 
-/**
- * Serve the chatbot embed JS
- */
-export const serveEmbedScript = async (req, res) => {
+export const generateEmbedScript = async (req, res) => {
   try {
-    const { id } = req.params; // chatbot ID
+    const chatbotId = req.params.id;
 
-    // ✅ Required headers
-    res.setHeader('Content-Type', 'application/javascript');
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 hour cache
-    res.setHeader('X-Frame-Options', 'ALLOWALL'); // Allow embedding on any site
-    res.setHeader('Content-Security-Policy', 'frame-ancestors *'); // modern browsers
-
-    if (!id) {
-      return res.status(400).send(`console.error("Chatbot ID is required");`);
+    if (!chatbotId) {
+      return res.send(`console.error("AIAERA: Missing chatbot ID");`);
     }
 
-    // Fetch chatbot config
-    const { data: chatbot, error } = await supabase
-      .from('chatbot_configs')
-      .select('id, name')
-      .eq('id', id)
-      .single();
-
-    if (error || !chatbot) {
-      return res.status(404).send(`console.error("Chatbot not found");`);
+    const APP_BASE = (process.env.APP_BASE_URL || "").replace(/\/$/, "");
+    if (!APP_BASE) {
+      return res.send(`console.error("AIAERA: Missing APP_BASE_URL");`);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173"; // fallback for dev
-    const safeName = (chatbot.name || "Assistant").replace(/["'`]/g, "");
+    // Fetch chatbot to get theme + logo
+    const { data: bot } = await supabase
+      .from("chatbots")
+      .select("id, config")
+      .eq("id", chatbotId)
+      .maybeSingle();
+
+    if (!bot) {
+      return res.send(`console.error("AIAERA: Chatbot not found");`);
+    }
+
+    const cfg = bot.config || {};
+    const logo = cfg.logo_url || "";
+    const fallbackIcon = "https://cdn-icons-png.flaticon.com/512/4712/4712100.png";
+
+    // Theme colors from Builder
+    const theme = cfg.themeColors || {
+      background: "#0d0d14",
+      userBubble: "#7f5af0",
+      botBubble: "#00eaff",
+      text: "#ffffff",
+    };
+
+    const launcherImage = logo || fallbackIcon;
+    const iframeURL = `${APP_BASE}/public-chatbot/${chatbotId}`;
 
     const script = `
-      (function() {
-        try {
-          var iframe = document.createElement('iframe');
-          iframe.src = "${frontendUrl}/public-chatbot/${chatbot.id}";
-          iframe.style.position = "fixed";
-          iframe.style.bottom = "20px";
-          iframe.style.right = "20px";
-          iframe.style.width = "400px";
-          iframe.style.maxWidth = "90%";
-          iframe.style.height = "600px";
-          iframe.style.maxHeight = "80%";
-          iframe.style.border = "none";
-          iframe.style.borderRadius = "12px";
-          iframe.style.boxShadow = "0 4px 20px rgba(0,0,0,0.15)";
-          iframe.style.zIndex = "999999";
-          iframe.title = "AI Chatbot - ${safeName}";
-          iframe.setAttribute("allow", "microphone; clipboard-read; clipboard-write; fullscreen");
-          iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-modals");
-          iframe.loading = "lazy";
-          document.body.appendChild(iframe);
-        } catch (err) {
-          console.error("Failed to load chatbot:", err);
-        }
+      (function () {
+        const widgetTheme = {
+          background: "${theme.background}",
+          text: "${theme.text}",
+          glow: "${theme.userBubble}",
+          bot: "${theme.botBubble}",
+          user: "${theme.userBubble}"
+        };
+
+        const bubble = document.createElement("div");
+        bubble.id = "aiaera-chat-bubble";
+        bubble.style.position = "fixed";
+        bubble.style.width = "62px";
+        bubble.style.height = "62px";
+        bubble.style.borderRadius = "50%";
+        bubble.style.bottom = "22px";
+        bubble.style.right = "22px";
+        bubble.style.cursor = "pointer";
+        bubble.style.zIndex = "999999";
+        bubble.style.background = "rgba(255,255,255,0.12)";
+        bubble.style.backdropFilter = "blur(12px)";
+        bubble.style.border = "2px solid rgba(255,255,255,0.18)";
+        bubble.style.boxShadow = "0 0 22px " + widgetTheme.glow;
+        bubble.style.display = "flex";
+        bubble.style.alignItems = "center";
+        bubble.style.justifyContent = "center";
+        bubble.style.transition = "0.25s ease";
+
+        bubble.onmouseenter = () => {
+          bubble.style.transform = "scale(1.08)";
+          bubble.style.boxShadow = "0 0 28px " + widgetTheme.glow;
+        };
+        bubble.onmouseleave = () => {
+          bubble.style.transform = "scale(1)";
+          bubble.style.boxShadow = "0 0 22px " + widgetTheme.glow;
+        };
+
+        const img = document.createElement("img");
+        img.src = "${launcherImage}";
+        img.style.width = "100%";
+        img.style.height = "100%";
+        img.style.borderRadius = "50%";
+        img.style.objectFit = "cover";
+        bubble.appendChild(img);
+
+        document.body.appendChild(bubble);
+
+        // Widget container
+        const widget = document.createElement("div");
+        widget.id = "aiaera-widget";
+        widget.style.position = "fixed";
+        widget.style.bottom = "92px";
+        widget.style.right = "20px";
+        widget.style.width = "360px";
+        widget.style.height = "520px";
+        widget.style.borderRadius = "18px";
+        widget.style.overflow = "hidden";
+        widget.style.zIndex = "999999";
+        widget.style.background = widgetTheme.background;
+        widget.style.border = "1px solid rgba(255,255,255,0.14)";
+        widget.style.boxShadow = "0 0 30px " + widgetTheme.glow;
+        widget.style.display = "none";
+        widget.style.opacity = 0;
+        widget.style.transform = "translateY(20px) scale(0.85)";
+        widget.style.transition = "all 260ms cubic-bezier(0.16, 1, 0.3, 1)";
+
+        const iframe = document.createElement("iframe");
+        iframe.src = "${iframeURL}";
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        iframe.style.border = "none";
+        widget.appendChild(iframe);
+
+        document.body.appendChild(widget);
+
+        // Open widget
+        bubble.onclick = () => {
+          widget.style.display = "block";
+          setTimeout(() => {
+            widget.style.opacity = 1;
+            widget.style.transform = "translateY(0) scale(1)";
+          }, 10);
+        };
+
+        // Close widget outside
+        document.addEventListener("click", (e) => {
+          if (!widget.contains(e.target) && e.target !== bubble) {
+            widget.style.opacity = 0;
+            widget.style.transform = "translateY(20px) scale(0.85)";
+            setTimeout(() => (widget.style.display = "none"), 250);
+          }
+        });
+
+        // Draggable bubble
+        let dragging = false, offsetX, offsetY;
+
+        bubble.addEventListener("mousedown", (e) => {
+          dragging = true;
+          bubble.style.transition = "none";
+          offsetX = e.clientX - bubble.getBoundingClientRect().left;
+          offsetY = e.clientY - bubble.getBoundingClientRect().top;
+        });
+
+        document.addEventListener("mouseup", () => {
+          dragging = false;
+          bubble.style.transition = "0.25s ease";
+        });
+
+        document.addEventListener("mousemove", (e) => {
+          if (!dragging) return;
+          const x = e.clientX - offsetX;
+          const y = e.clientY - offsetY;
+          bubble.style.left = x + "px";
+          bubble.style.top = y + "px";
+        });
       })();
     `;
 
-    res.send(script);
-  } catch (err) {
-    res.setHeader('Content-Type', 'application/javascript');
-    res.status(500).send(`console.error("Internal Server Error loading chatbot");`);
-    handleError(res, err);
+    res.setHeader("Content-Type", "application/javascript");
+    return res.send(script);
+  } catch (error) {
+    console.error("Embed Script Error:", error);
+    return res.send(`console.error("AIAERA embed crashed")`);
   }
 };

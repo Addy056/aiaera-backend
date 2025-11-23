@@ -5,9 +5,9 @@ import supabase from "../config/supabaseClient.js";
 import { parsePDFBuffer } from "../utils/pdfUtils.js";
 import { parseExcelBuffer } from "../utils/excelUtils.js";
 
-// ----------------------
-// Multer config (memory storage, 10MB max, restrict file types)
-// ----------------------
+/* ------------------------------------------------------
+ * 1) MULTER CONFIG – memory upload + file type control
+ * ------------------------------------------------------ */
 const allowedTypes = [
   "application/pdf",
   "text/csv",
@@ -18,37 +18,46 @@ const allowedTypes = [
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     if (allowedTypes.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Unsupported file type. Allowed: PDF, CSV, XLS/XLSX, TXT"));
+    else cb(new Error("Unsupported file. Allowed: PDF, CSV, TXT, XLS, XLSX"));
   },
 });
 
 export const uploadMiddleware = upload.single("file");
 
-// ----------------------
-// Upload a file → Supabase + extract content
-// ----------------------
+
+/* ------------------------------------------------------
+ * 2) UPLOAD FILE → Supabase Storage + Store Metadata
+ * ------------------------------------------------------ */
 export const uploadFile = async (req, res) => {
   try {
-    // ✅ Determine user
     const userId = req.user?.id || req.body.userId;
-    if (!userId) return res.status(400).json({ error: "Missing userId" });
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const chatbot_id = req.body.chatbot_id || null;
+
+    if (!userId)
+      return res.status(400).json({ success: false, error: "Missing userId" });
+
+    if (!req.file)
+      return res.status(400).json({ success: false, error: "No file uploaded" });
 
     const { originalname, buffer, mimetype, size } = req.file;
-    const chatbot_id = req.body.chatbot_id || null;
+
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || "chatbot-files";
 
-    // ✅ Generate unique filename
+    /* -----------------------------
+     * Generate Unique Filename
+     * ----------------------------- */
+    const ext = originalname.split(".").pop();
     const random = crypto.randomBytes(8).toString("hex");
-    const fileExt = originalname.split(".").pop();
-    const filename = `${Date.now()}_${random}.${fileExt}`;
+    const filename = `${Date.now()}_${random}.${ext}`;
     const path = `${userId}/${filename}`;
 
-    // ✅ Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    /* -----------------------------
+     * Upload to Supabase Storage
+     * ----------------------------- */
+    const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(path, buffer, {
         contentType: mimetype,
@@ -57,14 +66,17 @@ export const uploadFile = async (req, res) => {
       });
 
     if (uploadError) {
-      console.error("[Uploads] Storage upload error:", uploadError);
+      console.error("[Uploads] Storage upload failed:", uploadError);
       return res.status(500).json({
-        error: uploadError.message || "Storage upload failed",
+        success: false,
+        error: "Failed to upload file to storage",
       });
     }
 
-    // ✅ Insert file metadata
-    const { data: metaData, error: metaError } = await supabase
+    /* -----------------------------
+     * Insert Metadata
+     * ----------------------------- */
+    const { data: meta, error: metaErr } = await supabase
       .from("chatbot_files")
       .insert([
         {
@@ -75,67 +87,89 @@ export const uploadFile = async (req, res) => {
           filename: originalname,
           mime_type: mimetype,
           size,
+          created_at: new Date().toISOString(),
         },
       ])
       .select()
-      .single();
+      .maybeSingle();
 
-    if (metaError) console.warn("[Uploads] Failed to save metadata:", metaError);
-
-    // ✅ Extract content (PDF / CSV / Excel / TXT)
-    let extractedContent = "";
-    let contentType = "";
-
-    if (mimetype === "application/pdf") {
-      extractedContent = await parsePDFBuffer(buffer);
-      contentType = "pdf";
-    } else if (mimetype === "text/csv" || mimetype.includes("excel")) {
-      extractedContent = await parseExcelBuffer(buffer);
-      contentType = "spreadsheet";
-    } else if (mimetype === "text/plain") {
-      extractedContent = buffer.toString("utf-8");
-      contentType = "text";
+    if (metaErr) {
+      console.warn("[Uploads] Failed to insert metadata:", metaErr);
     }
 
-    // ✅ Normalize extracted content
-    const normalizedContent =
-      extractedContent && typeof extractedContent === "object"
-        ? JSON.stringify(extractedContent)
-        : extractedContent;
+    /* -----------------------------
+     * Extract Content (PDF / CSV / Excel / TXT)
+     * ----------------------------- */
+    let extracted = "";
+    let type = "";
 
-    // ✅ Store extracted text into chatbot_file_data (JSON)
-    if (metaData?.id && normalizedContent) {
-      const { error: contentError } = await supabase
+    try {
+      if (mimetype === "application/pdf") {
+        extracted = await parsePDFBuffer(buffer);
+        type = "pdf";
+      } else if (
+        mimetype === "text/csv" ||
+        mimetype.includes("excel") ||
+        mimetype.includes("spreadsheet")
+      ) {
+        extracted = await parseExcelBuffer(buffer);
+        type = "spreadsheet";
+      } else if (mimetype === "text/plain") {
+        extracted = buffer.toString("utf-8");
+        type = "text";
+      }
+    } catch (err) {
+      console.error("[Uploads] Extraction error:", err);
+    }
+
+    const safeContent =
+      extracted && typeof extracted === "object"
+        ? JSON.stringify(extracted)
+        : extracted || "";
+
+    /* -----------------------------
+     * Save Extracted Content
+     * ----------------------------- */
+    if (meta?.id && safeContent) {
+      const { error: contentErr } = await supabase
         .from("chatbot_file_data")
         .insert([
           {
-            file_id: metaData.id,
-            chatbot_id: chatbot_id || null,
-            content: { text: normalizedContent },
+            file_id: meta.id,
+            chatbot_id,
+            content: { text: safeContent },
+            type,
+            created_at: new Date().toISOString(),
           },
         ]);
 
-      if (contentError)
-        console.error("[Uploads] Failed to save extracted content:", contentError);
+      if (contentErr) {
+        console.error("[Uploads] Failed to save extracted content:", contentErr);
+      }
     }
 
-    // ✅ Return response
+    /* -----------------------------
+     * Response
+     * ----------------------------- */
     return res.status(201).json({
       success: true,
-      message: "✅ File uploaded and processed successfully",
-      storage: uploadData,
-      metadata: metaData || null,
-      extractedContent, // optional for preview
+      message: "File uploaded & processed successfully",
+      metadata: meta || null,
+      extracted: safeContent,
     });
   } catch (err) {
     console.error("[Uploads] Upload error:", err);
-    return res.status(500).json({ error: "Failed to upload file" });
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error during upload",
+    });
   }
 };
 
-// ----------------------
-// List all files for user
-// ----------------------
+
+/* ------------------------------------------------------
+ * 3) LIST FILES
+ * ------------------------------------------------------ */
 export const listFiles = async (req, res) => {
   try {
     const userId = req.user?.id || req.query.userId;
@@ -147,81 +181,93 @@ export const listFiles = async (req, res) => {
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    res.json({ success: true, files: data });
+    if (error) {
+      console.error("[Uploads] List error:", error);
+      return res.status(500).json({ error: "Failed to list files" });
+    }
+
+    res.json({ success: true, files: data || [] });
   } catch (err) {
-    console.error("[Uploads] List files error:", err);
-    res.status(500).json({ error: "Failed to list files" });
+    console.error("[Uploads] Unexpected list error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// ----------------------
-// Generate signed download URL
-// ----------------------
+
+/* ------------------------------------------------------
+ * 4) GET DOWNLOAD URL
+ * ------------------------------------------------------ */
 export const getDownloadUrl = async (req, res) => {
   try {
     const userId = req.user?.id || req.query.userId;
     const { id } = req.params;
 
-    const { data: fileRow, error: fetchError } = await supabase
+    const { data: file, error } = await supabase
       .from("chatbot_files")
       .select("*")
       .eq("id", id)
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !fileRow)
+    if (error || !file)
       return res.status(404).json({ error: "File not found" });
 
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(fileRow.bucket)
-      .createSignedUrl(fileRow.path, 3600);
+    const { data: urlData, error: urlErr } = await supabase.storage
+      .from(file.bucket)
+      .createSignedUrl(file.path, 3600);
 
-    if (signedUrlError) throw signedUrlError;
-    res.json({ success: true, url: signedUrlData.signedUrl });
+    if (urlErr) {
+      return res.status(500).json({ error: "Failed to generate URL" });
+    }
+
+    return res.json({ success: true, url: urlData.signedUrl });
   } catch (err) {
-    console.error("[Uploads] Get download URL error:", err);
-    res.status(500).json({ error: "Failed to generate download URL" });
+    console.error("[Uploads] Download URL error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 
-// ----------------------
-// Delete a file and metadata (and extracted content)
-// ----------------------
+
+/* ------------------------------------------------------
+ * 5) DELETE FILE (Storage + Metadata + Extracted Content)
+ * ------------------------------------------------------ */
 export const deleteFile = async (req, res) => {
   try {
     const userId = req.user?.id || req.query.userId;
     const { id } = req.params;
 
-    const { data: fileRow, error: fetchError } = await supabase
+    const { data: file, error } = await supabase
       .from("chatbot_files")
       .select("*")
       .eq("id", id)
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
 
-    if (fetchError || !fileRow)
+    if (error || !file)
       return res.status(404).json({ error: "File not found" });
 
-    // ✅ Remove from Supabase Storage
-    const { error: removeError } = await supabase.storage
-      .from(fileRow.bucket)
-      .remove([fileRow.path]);
+    // Remove from storage
+    const { error: removeErr } = await supabase.storage
+      .from(file.bucket)
+      .remove([file.path]);
 
-    if (removeError) {
-      console.error("[Uploads] Storage remove error:", removeError);
-      return res.status(500).json({ error: "Failed to delete file from storage" });
+    if (removeErr) {
+      console.error("[Uploads] Storage remove error:", removeErr);
+      return res.status(500).json({ error: "Failed to delete from storage" });
     }
 
-    // ✅ Delete metadata
+    // Delete metadata
     await supabase.from("chatbot_files").delete().eq("id", id);
-
-    // ✅ Delete related extracted content
     await supabase.from("chatbot_file_data").delete().eq("file_id", id);
 
-    res.json({ success: true, message: "✅ File deleted successfully" });
+    return res.json({
+      success: true,
+      message: "File deleted successfully",
+    });
   } catch (err) {
-    console.error("[Uploads] Delete file error:", err);
-    res.status(500).json({ error: "Failed to delete file" });
+    console.error("[Uploads] Delete error:", err);
+    return res.status(500).json({
+      error: "Failed to delete file",
+    });
   }
 };

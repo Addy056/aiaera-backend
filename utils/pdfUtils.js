@@ -2,72 +2,82 @@
 import pdfParse from "pdf-parse-fixed";
 import { PDFDocument } from "pdf-lib";
 
-/**
- * Extract text from a PDF buffer
- * @param {Buffer} buffer
- * @returns {Promise<string>} Extracted text
- */
+/* ------------------------------------------------------
+   1) Extract TEXT from PDF
+------------------------------------------------------- */
 export async function extractTextFromPDFBuffer(buffer) {
   try {
     const data = await pdfParse(buffer);
     return data.text || "";
   } catch (err) {
-    console.error("[PDFUtils] extractTextFromPDFBuffer error:", err);
+    console.error("[PDFUtils] Text extraction error:", err);
     return "";
   }
 }
 
-/**
- * Extract images from PDF buffer
- * @param {Buffer} buffer
- * @returns {Promise<Array<{name: string, data: Buffer, type: string}>>} Images array
- */
-export async function extractImagesFromPDFBuffer(buffer) {
+/* ------------------------------------------------------
+   2) Extract IMAGES from PDF
+   pdf-lib does not give raw XObjects, but it lets
+   you load embedded images using "page.getImages()"
+------------------------------------------------------- */
+
+async function extractImagesFromPDFBuffer(buffer) {
   try {
     const pdfDoc = await PDFDocument.load(buffer);
+
     const images = [];
-    const pages = pdfDoc.getPages();
+    let index = 0;
 
-    let imgIndex = 0;
+    // Iterate pages
+    for (const [pageIndex, page] of pdfDoc.getPages().entries()) {
+      const embeddedImages = page.node.Resources()?.XObject;
 
-    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-      const page = pages[pageIndex];
+      if (!embeddedImages) continue;
 
-      // Access XObjects (images) on the page
-      const xObjects = page.node.Resources?.()?.XObject || {};
+      for (const key of Object.keys(embeddedImages)) {
+        const obj = embeddedImages[key];
 
-      for (const key of Object.keys(xObjects)) {
-        const xObject = xObjects[key];
-        const type = xObject.constructor.name;
+        // Only extract if it's an image
+        if (obj?.dict?.get("Subtype")?.name !== "Image") continue;
 
-        if (type === "PDFRawStream") {
-          const imgBuffer = xObject.contents;
-          if (imgBuffer) {
-            imgIndex++;
-            images.push({
-              name: `page-${pageIndex + 1}-img-${imgIndex}.jpg`,
-              data: imgBuffer,
-              type: "image/jpeg",
-            });
-          }
-        }
+        index++;
+
+        const imgData = obj.contents;
+
+        // Determine file type
+        let ext = "jpg";
+        if (obj.dict.get("ColorSpace")?.name === "DeviceRGB") ext = "jpg";
+        if (obj.dict.get("Filter")?.name === "FlateDecode") ext = "png";
+
+        images.push({
+          name: `page-${pageIndex + 1}-image-${index}.${ext}`,
+          data: Buffer.from(imgData),
+          type: ext === "jpg" ? "image/jpeg" : "image/png",
+        });
       }
     }
 
     return images;
   } catch (err) {
-    console.error("[PDFUtils] extractImagesFromPDFBuffer error:", err);
+    console.error("[PDFUtils] Image extraction error:", err);
     return [];
   }
 }
 
-/**
- * Extract both text and images from a PDF buffer
- * @param {Buffer} buffer
- * @returns {Promise<{text: string, images: Array}>}
- */
+/* ------------------------------------------------------
+   3) Parse FULL PDF (text + images)
+------------------------------------------------------- */
 export async function parsePDFBuffer(buffer) {
-  const text = await extractTextFromPDFBuffer(buffer);
-  const images = await extractImagesFromPDFBuffer(buffer);
-  return { text, images };
+  try {
+    const text = await extractTextFromPDFBuffer(buffer);
+    const images = await extractImagesFromPDFBuffer(buffer);
+
+    return {
+      text: text || "",
+      images: images || [],
+    };
+  } catch (err) {
+    console.error("[PDFUtils] parsePDFBuffer fatal error:", err);
+    return { text: "", images: [] };
+  }
 }

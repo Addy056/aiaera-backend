@@ -3,71 +3,62 @@ import express from "express";
 import { requireAuth } from "../middleware/authMiddleware.js";
 import {
   createChatbot,
+  getUserChatbots,
   updateChatbot,
-  deleteChatbot,
-  getPublicChatbotConfig,
   publicChatbot,
+  previewChat,
+  getPublicChatbotConfig,
 } from "../controllers/chatbotController.js";
-import supabase from "../config/supabaseClient.js";
 
 const router = express.Router();
 
-/* ------------------------------
-   Async handler wrapper
------------------------------- */
+// Helper to wrap async functions
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-/* ============================================================
-   🔹 PUBLIC CHATBOT MESSAGE
-   POST /api/chatbot/public/:id
-============================================================ */
-router.post(
-  "/public/:id",
-  asyncHandler(async (req, res) => {
-    res.setHeader("Content-Type", "application/json");
-
-    try {
-      await publicChatbot(req, res);
-    } catch (error) {
-      console.error("🔥 Public chatbot error:", error);
-      return res.status(500).json({
-        error: "Chatbot failed to process your request",
-      });
-    }
-  })
-);
-
-/* ============================================================
-   🔹 PUBLIC CHATBOT CONFIG (iframe)
+/* -------------------------------
+   PUBLIC: GET CHATBOT CONFIG
    GET /api/chatbot/config/:id
-============================================================ */
+--------------------------------*/
 router.get(
   "/config/:id",
   asyncHandler(async (req, res) => {
     res.setHeader("Content-Type", "application/json");
-
-    try {
-      await getPublicChatbotConfig(req, res);
-    } catch (error) {
-      console.error("🔥 Public config error:", error);
-      return res.status(500).json({ error: "Failed to load chatbot config" });
-    }
+    return getPublicChatbotConfig(req, res);
   })
 );
 
-/* ============================================================
-   🔒 PROTECTED ROUTES (USER LOGGED IN)
-============================================================ */
+/* -------------------------------
+   PUBLIC: CHATBOT MESSAGE
+   POST /api/chatbot/public/:id
+--------------------------------*/
+router.post(
+  "/public/:id",
+  asyncHandler(async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    return publicChatbot(req, res);
+  })
+);
+
+/* -------------------------------
+   BUILDER PREVIEW (AUTH OPTIONAL)
+   POST /api/chatbot/preview
+--------------------------------*/
+router.post(
+  "/preview",
+  asyncHandler(async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    return previewChat(req, res);
+  })
+);
+
+/* -------------------------------
+   PROTECTED ROUTES
+--------------------------------*/
 router.use(requireAuth);
 
-/* CREATE */
 router.post("/", asyncHandler(createChatbot));
-
-/* UPDATE */
+router.get("/", asyncHandler(getUserChatbots));
 router.put("/:id", asyncHandler(updateChatbot));
-
-/* DELETE */
-router.delete("/:id", asyncHandler(deleteChatbot));
 
 export default router;

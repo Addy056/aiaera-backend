@@ -11,63 +11,71 @@ import { requireAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// ----------------------
-// All routes require authentication
-// ----------------------
+// ------------------------------------------------------
+// All Upload Routes Require Authentication
+// ------------------------------------------------------
 router.use(requireAuth);
 
-// ----------------------
-// Upload a single file
-// Field name for file: 'file'
-// Supported types: PDF, CSV, XLS/XLSX, TXT
-// ----------------------
-router.post("/", uploadMiddleware, async (req, res) => {
+// ------------------------------------------------------
+// 1) Upload File
+// Field: file
+// ------------------------------------------------------
+router.post("/", uploadMiddleware, async (req, res, next) => {
   try {
     await uploadFile(req, res);
   } catch (err) {
     console.error("[Uploads] Upload error:", err);
-    res.status(500).json({ success: false, message: "File upload failed", error: err.message });
+    next(err);
   }
 });
 
-// ----------------------
-// List all files uploaded by authenticated user
-// ----------------------
-router.get("/", async (req, res) => {
+// ------------------------------------------------------
+// 2) List Files
+// (Controller already sends response → DO NOT res.json here)
+// ------------------------------------------------------
+router.get("/", async (req, res, next) => {
   try {
-    const files = await listFiles(req, res);
-    res.status(200).json({ success: true, files });
+    await listFiles(req, res); // controller handles response
   } catch (err) {
     console.error("[Uploads] List files error:", err);
-    res.status(500).json({ success: false, message: "Failed to list files", error: err.message });
+    next(err);
   }
 });
 
-// ----------------------
-// Generate a temporary signed download URL for a file
-// URL valid for 1 hour
-// ----------------------
-router.get("/:id/download", async (req, res) => {
+// ------------------------------------------------------
+// 3) Get Download URL
+// ------------------------------------------------------
+router.get("/:id/download", async (req, res, next) => {
   try {
-    const url = await getDownloadUrl(req, res);
-    res.status(200).json({ success: true, url });
+    await getDownloadUrl(req, res); // controller handles response
   } catch (err) {
-    console.error("[Uploads] Get download URL error:", err);
-    res.status(500).json({ success: false, message: "Failed to generate download URL", error: err.message });
+    console.error("[Uploads] Download URL error:", err);
+    next(err);
   }
 });
 
-// ----------------------
-// Delete a file and its metadata
-// ----------------------
-router.delete("/:id", async (req, res) => {
+// ------------------------------------------------------
+// 4) Delete File
+// ------------------------------------------------------
+router.delete("/:id", async (req, res, next) => {
   try {
-    await deleteFile(req, res);
-    res.status(200).json({ success: true, message: "File deleted successfully" });
+    await deleteFile(req, res); // controller handles response
   } catch (err) {
     console.error("[Uploads] Delete file error:", err);
-    res.status(500).json({ success: false, message: "Failed to delete file", error: err.message });
+    next(err);
   }
+});
+
+// ------------------------------------------------------
+// 5) Route-Level Fallback Error Handler
+// ------------------------------------------------------
+router.use((err, req, res, next) => {
+  console.error("❌ Uploads Route Error:", err.stack || err.message);
+  res.status(500).json({
+    success: false,
+    error: "Internal server error in uploads route",
+    message: err.message || "Unknown error",
+  });
 });
 
 export default router;

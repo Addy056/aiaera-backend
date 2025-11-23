@@ -2,10 +2,32 @@
 import supabase from "../config/supabaseClient.js";
 import { parsePDFBuffer } from "../utils/pdfUtils.js";
 import { parseExcelBuffer } from "../utils/excelUtils.js";
+import csvParser from "csv-parser";
+import { Readable } from "stream";
 
-/**
- * Extract content from a file (PDF, CSV, Excel, TXT) and save to Supabase
- */
+/* ----------------------------------------
+   Helper: Parse CSV Buffer
+----------------------------------------- */
+async function parseCSV(buffer) {
+  return new Promise((resolve, reject) => {
+    const rows = [];
+    Readable.from(buffer)
+      .pipe(csvParser())
+      .on("data", (row) => rows.push(row))
+      .on("end", () => resolve(JSON.stringify(rows)))
+      .on("error", (err) => reject(err));
+  });
+}
+
+/* ----------------------------------------
+   Helper: Truncate text
+----------------------------------------- */
+const truncate = (text, limit = 8000) =>
+  text.length > limit ? text.substring(0, limit) : text;
+
+/* ----------------------------------------
+   Extract + Store File Content
+----------------------------------------- */
 export const extractAndSaveFileContent = async (req, res) => {
   try {
     const user = req.user;
@@ -15,103 +37,123 @@ export const extractAndSaveFileContent = async (req, res) => {
       return res.status(400).json({ error: "file_id is required" });
     }
 
-    // Fetch file metadata
-    const { data: fileRow, error: fetchError } = await supabase
+    /* ----------------------------------------
+       1️⃣ Fetch File Metadata
+    ----------------------------------------- */
+    const { data: fileRow, error: fetchErr } = await supabase
       .from("chatbot_files")
       .select("*")
       .eq("id", file_id)
       .eq("user_id", user.id)
       .single();
 
-    if (fetchError || !fileRow) {
-      console.error("❌ File not found or fetch error:", fetchError);
+    if (fetchErr || !fileRow) {
       return res.status(404).json({ error: "File not found" });
     }
 
-    // Download file from Supabase Storage
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from(fileRow.bucket)
-      .download(fileRow.path);
+    /* ----------------------------------------
+       2️⃣ Download File From Storage
+    ----------------------------------------- */
+    let arrayBuffer;
 
-    if (downloadError || !fileData) {
-      console.error("❌ Failed to download file:", downloadError);
-      return res.status(500).json({ error: "Failed to download file" });
+    // Try storage first
+    const { data: fileBlob, error: downloadError } =
+      await supabase.storage.from(fileRow.bucket).download(fileRow.path);
+
+    if (fileBlob) {
+      arrayBuffer = await fileBlob.arrayBuffer();
+    } else {
+      // Fallback: use publicUrl if storage download fails
+      const resp = await fetch(fileRow.public_url || fileRow.publicUrl);
+      if (!resp.ok) {
+        console.error("❌ Public URL download failed");
+        return res.status(500).json({ error: "Failed to read file" });
+      }
+      arrayBuffer = await resp.arrayBuffer();
     }
 
-    // Convert Blob → Buffer (for Node.js parsers)
-    let fileBuffer;
-    try {
-      fileBuffer = Buffer.from(await fileData.arrayBuffer());
-    } catch (convErr) {
-      console.error("❌ Failed to convert file Blob to Buffer:", convErr);
-      return res.status(500).json({ error: "File conversion failed" });
-    }
+    const buffer = Buffer.from(arrayBuffer);
 
-    let extractedContent = null;
-    let contentType = "";
+    /* ----------------------------------------
+       3️⃣ Extract Text Based on MIME Type
+    ----------------------------------------- */
+    const mime = fileRow.mime_type;
+    let extractedText = "";
+    let type = "";
 
-    // Extract content based on MIME type
     try {
-      if (fileRow.mime_type === "application/pdf") {
-        extractedContent = await parsePDFBuffer(fileBuffer);
-        contentType = "pdf";
-      } else if (fileRow.mime_type === "text/csv") {
-        extractedContent = await parseExcelBuffer(fileBuffer);
-        contentType = "csv";
+      if (mime === "application/pdf") {
+        extractedText = await parsePDFBuffer(buffer);
+        type = "pdf";
+      } else if (mime === "text/csv" || mime.includes("csv")) {
+        extractedText = await parseCSV(buffer);
+        type = "csv";
       } else if (
-        fileRow.mime_type.includes("excel") ||
-        fileRow.mime_type ===
+        mime.includes("excel") ||
+        mime ===
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       ) {
-        extractedContent = await parseExcelBuffer(fileBuffer);
-        contentType = "excel";
-      } else if (fileRow.mime_type === "text/plain") {
-        extractedContent = fileBuffer.toString("utf-8");
-        contentType = "text";
+        extractedText = await parseExcelBuffer(buffer);
+        type = "excel";
+      } else if (
+        mime.includes("text/plain") ||
+        mime.includes("text/markdown") ||
+        mime.includes("javascript") ||
+        mime.includes("json")
+      ) {
+        extractedText = buffer.toString("utf-8");
+        type = "text";
       } else {
-        return res
-          .status(400)
-          .json({ error: "Unsupported file type for content extraction" });
+        return res.status(400).json({
+          error: `Unsupported file type: ${mime}`,
+        });
       }
     } catch (parseErr) {
-      console.error("❌ Error during content extraction:", parseErr);
-      return res.status(500).json({ error: "Failed to parse file content" });
+      console.error("❌ Parse error:", parseErr);
+      return res.status(500).json({ error: "Content extraction failed" });
     }
 
-    if (!extractedContent) {
+    if (!extractedText) {
       return res
         .status(500)
-        .json({ error: "Failed to extract content from file" });
+        .json({ error: "No content extracted from file" });
     }
 
-    // Save extracted content to Supabase
-    const { data: contentData, error: contentError } = await supabase
+    extractedText = truncate(extractedText);
+
+    /* ----------------------------------------
+       4️⃣ Save Extracted Content
+       Use upsert: avoids duplicates
+    ----------------------------------------- */
+    const payload = {
+      file_id: fileRow.id,
+      user_id: user.id,
+      chatbot_id: fileRow.chatbot_id || null,
+      type,
+      content: { text: extractedText },
+      updated_at: new Date(),
+    };
+
+    const { data: saved, error: saveErr } = await supabase
       .from("chatbot_file_data")
-      .insert([
-        {
-          file_id: fileRow.id,
-          user_id: user.id,
-          type: contentType,
-          content: extractedContent,
-        },
-      ])
+      .upsert(payload, { onConflict: "file_id" })
       .select()
       .single();
 
-    if (contentError) {
-      console.error("❌ Failed to save extracted content:", contentError);
-      return res
-        .status(500)
-        .json({ error: "Failed to save extracted content" });
+    if (saveErr) {
+      console.error("❌ Save content error:", saveErr);
+      return res.status(500).json({
+        error: "Failed to save extracted content",
+      });
     }
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "Content extracted and saved successfully",
-      content: contentData,
+      message: "Content extracted & saved successfully.",
+      content: saved,
     });
   } catch (err) {
-    console.error("❌ Extract content error (unexpected):", err);
-    res.status(500).json({ error: "Failed to extract file content" });
+    console.error("🔥 Unexpected file extraction error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

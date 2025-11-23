@@ -7,44 +7,62 @@ import {
 
 const router = express.Router();
 
-/**
- * ------------------------------------------------------
- * Meta Webhook Routes
- * ------------------------------------------------------
- */
+/* ------------------------------------------------------
+   Async wrapper to simplify error handling
+------------------------------------------------------ */
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
 
-// GET /api/webhook/meta
-// Used by Meta (Facebook/WhatsApp) for webhook verification
-router.get("/meta", async (req, res, next) => {
-  try {
-    await verifyMetaWebhook(req, res);
-  } catch (err) {
-    console.error("❌ Error in GET /webhook/meta:", err.stack || err.message);
-    next(err);
-  }
-});
-
-// POST /api/webhook/meta
-// Handles incoming Meta webhook events (messages, status updates, etc.)
-router.post("/meta", async (req, res, next) => {
-  try {
-    await handleMetaWebhook(req, res);
-  } catch (err) {
-    console.error("❌ Error in POST /webhook/meta:", err.stack || err.message);
-    next(err);
-  }
-});
+/* ------------------------------------------------------
+   META WEBHOOK ROUTES (FB / IG / WhatsApp)
+------------------------------------------------------ */
 
 /**
- * ------------------------------------------------------
- * Global Error Handling for Webhook Routes
- * ------------------------------------------------------
+ * GET /api/webhook/meta
+ * Used by Meta (Facebook/Instagram/WhatsApp) for verification challenge.
  */
+router.get(
+  ["/meta", "/meta-webhook"],
+  asyncHandler(async (req, res) => {
+    return verifyMetaWebhook(req, res);
+  })
+);
+
+/**
+ * POST /api/webhook/meta
+ * Handles:
+ *   - WhatsApp messages
+ *   - Facebook Messenger webhook events
+ *   - Instagram DM webhook events
+ *   - WhatsApp delivery/status updates
+ */
+router.post(
+  ["/meta", "/meta-webhook"],
+  asyncHandler(async (req, res) => {
+    return handleMetaWebhook(req, res);
+  })
+);
+
+/* ------------------------------------------------------
+   CATCH-ALL (for invalid subroutes)
+------------------------------------------------------ */
+router.all("*", (req, res) => {
+  console.warn(`⚠️ Invalid webhook route accessed: ${req.originalUrl}`);
+  res.status(404).json({
+    success: false,
+    error: "Invalid webhook route",
+  });
+});
+
+/* ------------------------------------------------------
+   GLOBAL ERROR HANDLER (safe for webhook routes)
+------------------------------------------------------ */
 router.use((err, req, res, next) => {
-  console.error("❌ Webhook route unhandled error:", err.stack || err.message);
+  console.error("❌ Webhook Route Error:", err.message);
+
   res.status(500).json({
+    success: false,
     error: "Internal server error in webhook route",
-    message: err.message || "Unexpected error",
   });
 });
 

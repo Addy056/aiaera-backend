@@ -1,115 +1,117 @@
 // backend/controllers/publicChatbotController.js
 import supabase from "../config/supabaseClient.js";
-import { handleError } from "../utils/errorHandler.js";
-import fetch from "node-fetch";
 
-// ----------------------
-// Helper: Generate Google Maps link
-// ----------------------
-const getGoogleMapsLink = (location) => {
-  if (!location?.latitude || !location?.longitude) return null;
-  return `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
+/* -------------------------------------------------------
+ * Helper: Make Google Maps URL
+ * ------------------------------------------------------- */
+const makeGoogleMapsLink = (lat, lng) => {
+  if (!lat || !lng) return null;
+  return `https://maps.google.com/?q=${lat},${lng}`;
 };
 
-// ✅ Get chatbot config (public access)
+/* -------------------------------------------------------
+ * 1) GET PUBLIC CHATBOT CONFIG (for iframe + preview)
+ * ------------------------------------------------------- */
 export const getPublicChatbot = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id) return res.status(400).json({ error: "Chatbot ID is required" });
 
-    const { data: chatbot, error } = await supabase
-      .from("chatbot_configs")
+    if (!id)
+      return res.status(400).json({ success: false, error: "Chatbot ID is required" });
+
+    /* ----------------------------------------------
+     * Load chatbot
+     * ---------------------------------------------- */
+    const { data: bot, error: botErr } = await supabase
+      .from("chatbots")
       .select("*")
       .eq("id", id)
-      .single();
+      .maybeSingle();
 
-    if (error || !chatbot) {
-      return res.status(404).json({ error: "Chatbot not found" });
+    if (botErr || !bot) {
+      return res.status(404).json({ success: false, error: "Chatbot not found" });
     }
 
-    // ✅ Normalize fields
-    const normalizedConfig = {
-      id: chatbot.id,
-      name: chatbot.name || "AI Chatbot",
-      businessDescription: chatbot.businessDescription || "",
-      websiteUrl: chatbot.websiteUrl || "",
-      files: Array.isArray(chatbot.files) ? chatbot.files : [],
-      logoUrl: chatbot.logoUrl || null,
-      businessAddress: chatbot.businessAddress || null,
-      calendlyLink: chatbot.calendlyLink || null,
-      location: chatbot.location || null,
-      googleMapsLink: getGoogleMapsLink(chatbot.location),
+    let cfg = {};
+    try {
+      cfg = typeof bot.config === "string" ? JSON.parse(bot.config) : bot.config || {};
+    } catch {
+      cfg = {};
+    }
+
+    /* ----------------------------------------------
+     * Load Integrations
+     * ---------------------------------------------- */
+    const { data: integ } = await supabase
+      .from("user_integrations")
+      .select("*")
+      .eq("user_id", bot.user_id)
+      .maybeSingle();
+
+    /* ----------------------------------------------
+     * Load File Data (parsed text)
+     * ---------------------------------------------- */
+    let allFileText = "";
+    const { data: parsedFiles } = await supabase
+      .from("chatbot_file_data")
+      .select("content")
+      .eq("chatbot_id", id);
+
+    if (Array.isArray(parsedFiles)) {
+      parsedFiles.forEach((f) => {
+        if (f?.content?.text) {
+          allFileText += f.content.text + "\n---\n";
+        }
+      });
+    }
+
+    /* ----------------------------------------------
+     * Build Google Maps URL
+     * ---------------------------------------------- */
+    const mapsUrl = makeGoogleMapsLink(
+      integ?.business_lat,
+      integ?.business_lng
+    );
+
+    /* ----------------------------------------------
+     * Final normalized config
+     * ---------------------------------------------- */
+    const response = {
+      id: bot.id,
+      name: bot.name || "AI Assistant",
+      businessDescription: bot.business_info || "",
+      websiteUrl: cfg.businessWebsite || cfg.website_url || "",
+      logoUrl: cfg.logo_url || null,
+      themeColors: cfg.themeColors || null,
+      files: cfg.files || [],
+      calendlyLink: integ?.calendly_link || null,
+      businessAddress: integ?.business_address || null,
+      location: {
+        latitude: integ?.business_lat || null,
+        longitude: integ?.business_lng || null,
+      },
+      googleMapsLink: mapsUrl || null,
+      fileText: allFileText || "",
     };
 
-    res.status(200).json({ success: true, data: normalizedConfig });
+    return res.json({ success: true, data: response });
   } catch (err) {
-    handleError(res, err);
+    console.error("❌ publicChatbotController Error:", err);
+    return res.status(500).json({ success: false, error: "Server Error" });
   }
 };
 
-// ✅ Handle incoming chatbot messages (public)
+/* -------------------------------------------------------
+ * 2) PUBLIC MESSAGE (for NON-stream fallback — optional)
+ * ------------------------------------------------------- */
 export const sendPublicMessage = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { message, history = [] } = req.body;
-
-    if (!id) return res.status(400).json({ error: "Chatbot ID is required" });
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "Message must be a valid string" });
-    }
-
-    // 🔹 Get chatbot config
-    const { data: chatbot, error } = await supabase
-      .from("chatbot_configs")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error || !chatbot) {
-      return res.status(404).json({ error: "Chatbot not found" });
-    }
-
-    // 🔹 Validate AI API credentials
-    if (!process.env.AI_API_URL || !process.env.AI_API_KEY) {
-      return res.status(500).json({ error: "AI API not configured" });
-    }
-
-    // 🔹 Call AI API (with timeout)
-    let aiResponse;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-      const response = await fetch(process.env.AI_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.AI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          prompt: message,
-          history,
-          config: chatbot,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        throw new Error(`AI API failed with status ${response.status}`);
-      }
-
-      aiResponse = await response.json();
-    } catch (err) {
-      console.error("AI API error:", err.message);
-      return res.status(502).json({ error: "Failed to get AI response" });
-    }
-
-    res.status(200).json({
-      reply: aiResponse.reply || "I’m here to help!",
+    return res.status(400).json({
+      success: false,
+      error: "Use /api/chatbot/stream/:id for live replies.",
     });
   } catch (err) {
-    handleError(res, err);
+    console.error("❌ sendPublicMessage Error:", err);
+    return res.status(500).json({ success: false, error: "Server Error" });
   }
 };

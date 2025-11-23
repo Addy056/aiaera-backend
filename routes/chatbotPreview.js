@@ -5,67 +5,82 @@ import { getChatbotPreviewReply } from "../controllers/chatbotPreviewController.
 const router = express.Router();
 
 /**
- * ✅ GET /api/chatbot-preview
- * Health check endpoint (for Render uptime or manual verification)
+ * ---------------------------------------------
+ * GET /api/chatbot-preview
+ * Health check for Render / manual testing
+ * ---------------------------------------------
  */
 router.get("/", (req, res) => {
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     route: "/api/chatbot-preview",
     message:
-      "✅ Chatbot preview endpoint is active. Use POST /api/chatbot-preview for chatbot replies.",
+      "✅ Chatbot preview endpoint is active. Use POST /api/chatbot-preview for chatbot responses.",
   });
 });
 
 /**
- * Helper: Async route wrapper (to catch async errors cleanly)
+ * ---------------------------------------------
+ * Helper: safe async wrapper
+ * ---------------------------------------------
  */
 const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+  Promise.resolve(fn(req, res, next)).catch((err) => {
+    console.error("❌ [ChatbotPreviewRoute] Unexpected error:", err);
+    next(err);
+  });
 
 /**
- * ✅ POST /api/chatbot-preview
- * Main route used by the frontend builder preview.
- * Accepts:
- *   - messages[] (conversation so far)
- *   - userId (Supabase auth.user.id)
- * Optional:
- *   - chatbotConfig (temporary, for non-persistent previews)
+ * ---------------------------------------------
+ * POST /api/chatbot-preview
+ * Builder-side preview (NO subscription required)
+ * ---------------------------------------------
  *
- * Returns: { success, reply, provider }
+ * Required:
+ *   - messages[]: array of chat history
+ *   - userId: Supabase user id
+ *
+ * Returns:
+ *   - { success, reply, context }
  */
-router.post("/", asyncHandler(async (req, res, next) => {
-  const { messages, userId } = req.body || {};
+router.post(
+  "/",
+  asyncHandler(async (req, res, next) => {
+    const { messages, userId } = req.body || {};
 
-  // Basic validation
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return res.status(400).json({
-      success: false,
-      error: "Invalid request: 'messages' array is required.",
-    });
-  }
+    // Basic validations
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid request: messages[] is required.",
+      });
+    }
 
-  if (!userId) {
-    return res.status(400).json({
-      success: false,
-      error: "Invalid request: 'userId' is required.",
-    });
-  }
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid request: userId is required.",
+      });
+    }
 
-  console.log(`💬 [ChatbotPreview] Incoming message from user ${userId}`);
+    console.log(
+      `💬 [ChatbotPreview] New preview request → user=${userId}, message="${messages[messages.length - 1]?.content}"`
+    );
 
-  // Delegate to controller
-  return getChatbotPreviewReply(req, res, next);
-}));
+    // Call controller
+    return getChatbotPreviewReply(req, res, next);
+  })
+);
 
 /**
- * ⚠️ Catch-all for invalid subroutes
- * Prevents confusion when testing URLs manually
+ * ---------------------------------------------
+ * Catch-all for wrong preview routes
+ * ---------------------------------------------
  */
 router.all("*", (req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
-    error: `❌ Invalid route "${req.originalUrl}". Try POST /api/chatbot-preview.`,
+    error: `❌ Invalid route "${req.originalUrl}". Try POST /api/chatbot-preview instead.`,
   });
 });
 

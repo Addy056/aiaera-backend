@@ -1,41 +1,58 @@
 // backend/utils/date.js
 
 /**
- * Adds a specified number of months to a given date
- * @param {Date|string|number} date - The original date
- * @param {number} months - Number of months to add
- * @returns {Date} - New date with months added
+ * Safely adds a number of months to a date.
+ * Handles:
+ *  - Leap years
+ *  - End-of-month overflow (e.g., Jan 31 + 1 month -> Feb 28/29)
+ *  - String, number, or Date input
+ *
+ * @param {Date|string|number} date
+ * @param {number} months
+ * @returns {Date}
  */
 export const addMonths = (date, months) => {
   if (!date || typeof months !== "number") {
     throw new Error("Invalid arguments: date and months are required");
   }
 
-  const originalDate = new Date(date);
-  if (isNaN(originalDate)) {
+  const original = new Date(date);
+  if (isNaN(original.getTime())) {
     throw new Error("Invalid date provided");
   }
 
-  const newDate = new Date(originalDate);
-  const targetMonth = newDate.getMonth() + months;
-  newDate.setMonth(targetMonth);
+  const year = original.getFullYear();
+  const month = original.getMonth();
+  const day = original.getDate();
 
-  // Handle month overflow (e.g., adding 1 month to Jan 31 → Feb 28/29)
-  if (newDate.getMonth() !== ((targetMonth % 12 + 12) % 12)) {
-    newDate.setDate(0); // last day of previous month
+  // Create target date (initial guess)
+  const result = new Date(original);
+  result.setMonth(month + months);
+
+  // If month changed more than expected, adjust day (overflow fix)
+  if (result.getMonth() !== ((month + months) % 12 + 12) % 12) {
+    result.setDate(0); // Move to last day of previous month
   }
 
-  return newDate;
+  return result;
 };
 
 /**
- * Checks if a given date has expired (i.e., is in the past)
- * @param {Date|string|number} date - The date to check
- * @returns {boolean} - true if expired, false otherwise
+ * Check if a date is expired (date < now).
+ * Always compares using UTC to avoid timezone issues.
+ *
+ * @param {Date|string|number} date
+ * @returns {boolean}
  */
 export const isExpired = (date) => {
   if (!date) throw new Error("Date is required");
-  const compareDate = new Date(date);
-  if (isNaN(compareDate)) throw new Error("Invalid date provided");
-  return compareDate < new Date();
+
+  const target = new Date(date);
+  if (isNaN(target.getTime())) {
+    throw new Error("Invalid date provided");
+  }
+
+  const now = new Date();
+
+  return target.getTime() < now.getTime();
 };
