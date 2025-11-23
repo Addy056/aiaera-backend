@@ -44,6 +44,7 @@ export const getSubscriptionStatus = async (req, res) => {
       });
     }
 
+    // No subscription found → treat as free
     if (!data) {
       return res.json({
         success: true,
@@ -63,6 +64,7 @@ export const getSubscriptionStatus = async (req, res) => {
       active: isActive,
       expires_at: data.expires_at,
     });
+
   } catch (err) {
     console.error("❌ Error (getSubscriptionStatus):", err);
     return res.status(500).json({
@@ -72,14 +74,12 @@ export const getSubscriptionStatus = async (req, res) => {
   }
 };
 
-
 /* ----------------------------------------------------
- * 2) CREATE SUBSCRIPTION
- * This endpoint DOES NOT create Razorpay order anymore.
- * It just validates requested plan.
+ * 2) CREATE SUBSCRIPTION (PLAN VALIDATION ONLY)
  *
- * Razorpay order creation is in:
- *    backend/controllers/paymentController.js  (createOrder)
+ * IMPORTANT:
+ * - This DOES NOT create Razorpay orders.
+ * - Razorpay flow happens inside paymentController.js
  * ---------------------------------------------------- */
 export const createSubscription = async (req, res) => {
   try {
@@ -93,23 +93,20 @@ export const createSubscription = async (req, res) => {
       });
     }
 
-    const allowed = ["free", "basic", "pro"];
-
-    if (!allowed.includes(plan)) {
+    const allowedPlans = ["free", "basic", "pro"];
+    if (!allowedPlans.includes(plan)) {
       return res.status(400).json({
         success: false,
         error: "Invalid plan",
       });
     }
 
-    // We do NOT create Razorpay order here anymore.
-    // Frontend must call /api/payment/create-order instead.
-
     return res.json({
       success: true,
       message: "Plan validated. Use /api/payment/create-order to proceed.",
       plan,
     });
+
   } catch (err) {
     console.error("❌ Error (createSubscription):", err);
     return res.status(500).json({
@@ -118,4 +115,3 @@ export const createSubscription = async (req, res) => {
     });
   }
 };
-

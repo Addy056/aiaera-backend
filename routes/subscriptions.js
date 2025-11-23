@@ -2,7 +2,6 @@
 import express from "express";
 import {
   createSubscription,
-  verifyPayment,
   getSubscriptionStatus,
 } from "../controllers/subscriptionsController.js";
 import { requireAuth } from "../middleware/authMiddleware.js";
@@ -16,7 +15,8 @@ const router = express.Router();
 
 /**
  * POST /api/subscriptions
- * Create subscription order (Razorpay)
+ * Validate user’s chosen plan.
+ * This DOES NOT create Razorpay order anymore.
  */
 router.post("/", requireAuth, async (req, res, next) => {
   try {
@@ -28,21 +28,8 @@ router.post("/", requireAuth, async (req, res, next) => {
 });
 
 /**
- * POST /api/subscriptions/verify
- * Verify Razorpay payment
- */
-router.post("/verify", requireAuth, async (req, res, next) => {
-  try {
-    await verifyPayment(req, res);
-  } catch (err) {
-    console.error("❌ Error in POST /subscriptions/verify:", err);
-    next(err);
-  }
-});
-
-/**
  * GET /api/subscriptions/status
- * Check if user's subscription is active
+ * Return user subscription status
  */
 router.get("/status", requireAuth, async (req, res, next) => {
   try {
@@ -54,7 +41,7 @@ router.get("/status", requireAuth, async (req, res, next) => {
 });
 
 /**
- * 404 Fallback
+ * 404 Fallback for unknown routes
  */
 router.all("*", (req, res) => {
   res.status(404).json({
