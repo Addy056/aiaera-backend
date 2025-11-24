@@ -34,7 +34,98 @@ const fetchFilesText = async (userId, fileIds) => {
   return data.map((d) => d.content).join("\n---\n");
 };
 
-// Build system prompt
+/* ---------------------------------------------------
+   UPDATED INTENT DETECTION (MULTIPLE MEETING LINKS)
+----------------------------------------------------*/
+const detectIntent = async (userId, text) => {
+  text = text.toLowerCase();
+
+  // Keywords that indicate meeting scheduling
+  const meetingKeywords = [
+    "book",
+    "meeting",
+    "call",
+    "schedule",
+    "appointment",
+    "talk",
+    "zoom",
+    "google meet",
+    "meet link",
+    "teams",
+    "video call",
+    "call with you",
+  ];
+
+  const locationKeywords = [
+    "location",
+    "address",
+    "where are you",
+    "map",
+    "located",
+    "office",
+    "find you",
+  ];
+
+  const isMeeting = meetingKeywords.some((k) => text.includes(k));
+  const isLocation = locationKeywords.some((k) => text.includes(k));
+
+  /* ---------------------------
+      📌 MEETING INTENT
+  ----------------------------*/
+  if (isMeeting) {
+    const { data: integ } = await supabase
+      .from("user_integrations")
+      .select("meeting_links")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (integ?.meeting_links && typeof integ.meeting_links === "object") {
+      const { calendly, zoom, google_meet, teams, other } = integ.meeting_links;
+
+      // Build a list of available meeting links
+      const links = [];
+
+      if (calendly) links.push(`• Calendly: ${calendly}`);
+      if (google_meet) links.push(`• Google Meet: ${google_meet}`);
+      if (zoom) links.push(`• Zoom: ${zoom}`);
+      if (teams) links.push(`• Microsoft Teams: ${teams}`);
+      if (other) links.push(`• Other: ${other}`);
+
+      if (links.length > 0) {
+        return {
+          matched: true,
+          reply:
+            `Here are our available meeting options:\n\n` +
+            links.join("\n"),
+        };
+      }
+    }
+  }
+
+  /* ---------------------------
+      📌 LOCATION INTENT
+  ----------------------------*/
+  if (isLocation) {
+    const { data: business } = await supabase
+      .from("business_data")
+      .select("location_url")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (business?.location_url) {
+      return {
+        matched: true,
+        reply: `You can find our location here:\n${business.location_url}`,
+      };
+    }
+  }
+
+  return { matched: false };
+};
+
+/* -----------------------------------------------
+   Build system prompt
+------------------------------------------------*/
 const buildSystemPrompt = (data) => {
   return `
 You are the official AI assistant of this business.
@@ -58,7 +149,7 @@ Rules:
 `;
 };
 
-// Map React frontend messages → Groq format
+// Map frontend → Groq format
 const mapMessages = (systemPrompt, messages) => [
   { role: "system", content: systemPrompt },
   ...messages.map((m) => ({
@@ -72,10 +163,16 @@ const mapMessages = (systemPrompt, messages) => [
 ------------------------------------------------*/
 export const previewChat = async (req, res) => {
   try {
-    const { messages, chatbotConfig } = req.body;
+    const { messages, chatbotConfig, userId } = req.body;
+
+    const lastUserMsg = messages[messages.length - 1]?.content || "";
+
+    // 🔥 Intent detection (meeting / location)
+    const intent = await detectIntent(userId, lastUserMsg);
+    if (intent.matched) return res.json({ reply: intent.reply });
 
     const filesText = await fetchFilesText(
-      req.body.userId,
+      userId,
       chatbotConfig.files || []
     );
 
@@ -91,9 +188,9 @@ export const previewChat = async (req, res) => {
       messages: groqMsg,
     });
 
-    const reply = response.choices[0].message?.content;
-
-    return res.json({ reply });
+    return res.json({
+      reply: response.choices[0].message?.content,
+    });
   } catch (err) {
     console.error("previewChat error:", err);
     return res.status(500).json({ error: "Preview failed" });
@@ -119,6 +216,13 @@ export const publicChatbot = async (req, res) => {
     if (!chatbot) return res.status(404).json({ error: "Chatbot not found" });
 
     const cfg = parseConfig(chatbot.config);
+
+    const lastUserMsg =
+      req.body.messages[req.body.messages.length - 1]?.content || "";
+
+    // 🔥 Intent detection
+    const intent = await detectIntent(chatbot.user_id, lastUserMsg);
+    if (intent.matched) return res.json({ reply: intent.reply });
 
     const filesText = await fetchFilesText(chatbot.user_id, cfg.files || []);
 

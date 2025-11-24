@@ -1,47 +1,53 @@
+// backend/routes/integrations.js
+
 import express from "express";
 import {
   verifyMetaWebhook,
   handleMetaWebhook,
   handleCalendlyWebhook,
-  saveIntegrations,
-  getIntegrations,
+  getUserIntegrations,
+  updateUserIntegrations,
 } from "../controllers/integrationsController.js";
 
 const router = express.Router();
 
-/* --------------------------------------------------------------------
-   META (WhatsApp / FB / IG) WEBHOOKS
-   Both legacy + clean paths kept for backward compatibility
--------------------------------------------------------------------- */
+/* ================================================================
+   META WEBHOOKS (WhatsApp / FB / Instagram)
+   Includes BOTH new + legacy routes for backward compatibility
+=============================================================== */
 
-// Verification (GET)
+// GET → Webhook verification
 router.get("/meta-webhook", verifyMetaWebhook);
 router.get("/meta", verifyMetaWebhook);
 
-// Incoming events (POST)
+// POST → Incoming events (WhatsApp messages, FB, IG)
 router.post("/meta-webhook", handleMetaWebhook);
 router.post("/meta", handleMetaWebhook);
 
-/* --------------------------------------------------------------------
+/* ================================================================
    CALENDLY WEBHOOKS
-   Legacy + clean endpoints
--------------------------------------------------------------------- */
+   Supports both clean and legacy paths
+=============================================================== */
+
 router.post("/calendly-webhook", handleCalendlyWebhook);
 router.post("/calendly", handleCalendlyWebhook);
 
-/* --------------------------------------------------------------------
-   USER INTEGRATIONS (CRUD)
--------------------------------------------------------------------- */
+/* ================================================================
+   USER INTEGRATIONS CRUD
+   Save: POST /api/integrations
+   Fetch: GET  /api/integrations?user_id=xxx
+=============================================================== */
 
-// Save or update integrations
-router.post("/", saveIntegrations);
+// Save or update integrations (WhatsApp, FB, IG, Business Info, Meeting Links)
+router.post("/", updateUserIntegrations);
 
-// Fetch integrations by ?user_id=
-router.get("/", getIntegrations);
+// Fetch user integrations
+router.get("/", getUserIntegrations);
 
-/* --------------------------------------------------------------------
-   ERROR HANDLER FOR THIS ROUTER ONLY
--------------------------------------------------------------------- */
+/* ================================================================
+   ROUTE-LEVEL ERROR HANDLER
+=============================================================== */
+
 router.use((err, req, res, next) => {
   console.error("❌ [Integrations Route Error]:", err.stack || err.message);
 
