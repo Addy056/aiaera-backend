@@ -5,28 +5,26 @@ import {
   verifyMetaWebhook,
   handleMetaWebhook,
   handleCalendlyWebhook,
-  getUserIntegrations,
-  updateUserIntegrations,
+  getIntegrations,      // ✅ correct name
+  saveIntegrations,     // ✅ correct name
 } from "../controllers/integrationsController.js";
 
 const router = express.Router();
 
 /* ================================================================
    META WEBHOOKS (WhatsApp / FB / Instagram)
-   Includes BOTH new + legacy routes for backward compatibility
 =============================================================== */
 
 // GET → Webhook verification
 router.get("/meta-webhook", verifyMetaWebhook);
 router.get("/meta", verifyMetaWebhook);
 
-// POST → Incoming events (WhatsApp messages, FB, IG)
+// POST → Incoming WhatsApp / FB / IG messages
 router.post("/meta-webhook", handleMetaWebhook);
 router.post("/meta", handleMetaWebhook);
 
 /* ================================================================
    CALENDLY WEBHOOKS
-   Supports both clean and legacy paths
 =============================================================== */
 
 router.post("/calendly-webhook", handleCalendlyWebhook);
@@ -34,18 +32,16 @@ router.post("/calendly", handleCalendlyWebhook);
 
 /* ================================================================
    USER INTEGRATIONS CRUD
-   Save: POST /api/integrations
-   Fetch: GET  /api/integrations?user_id=xxx
 =============================================================== */
 
-// Save or update integrations (WhatsApp, FB, IG, Business Info, Meeting Links)
-router.post("/", updateUserIntegrations);
+// Save/update integrations
+router.post("/", saveIntegrations);
 
-// Fetch user integrations
-router.get("/", getUserIntegrations);
+// Fetch integrations for a user
+router.get("/", getIntegrations);
 
 /* ================================================================
-   ROUTE-LEVEL ERROR HANDLER
+   ERROR HANDLER
 =============================================================== */
 
 router.use((err, req, res, next) => {
