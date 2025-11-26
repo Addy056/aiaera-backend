@@ -6,18 +6,18 @@ const router = express.Router();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.get("/preview-stream/:id", async (req, res) => {
-  // ✅ SSE HEADERS (BEFORE ANY ASYNC)
+  // ✅ SSE HEADERS (MUST BE FIRST)
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("X-Accel-Buffering", "no"); // ✅ disables proxy buffering
+  res.setHeader("X-Accel-Buffering", "no"); // Disable proxy buffering
   res.flushHeaders();
 
-  // ✅ IMMEDIATE FIRST FLUSH (CRITICAL FOR RENDER/CLOUDFLARE)
+  // ✅ IMMEDIATE OPEN EVENT (PREVENTS MIME ISSUES)
   res.write(`event: open\ndata: "connected"\n\n`);
 
-  // ✅ HEARTBEAT EVERY 10s TO PREVENT BUFFERING
+  // ✅ HEARTBEAT TO KEEP CONNECTION ALIVE
   const heartbeat = setInterval(() => {
     try {
       res.write(`event: ping\ndata: "keepalive"\n\n`);
@@ -35,7 +35,7 @@ router.get("/preview-stream/:id", async (req, res) => {
       return res.end();
     }
 
-    // ✅ SAFE PARSE
+    // ✅ SAFE MESSAGE PARSE
     let messages = [];
     try {
       messages = JSON.parse(decodeURIComponent(raw));
@@ -56,11 +56,24 @@ router.get("/preview-stream/:id", async (req, res) => {
       return res.end();
     }
 
+    // ✅ ✅ SHORT, IMPACTFUL, SALES-FOCUSED PROMPT
     const systemPrompt = `
-You are the official AI assistant for the business:
+You are a professional business AI chatbot.
+
+STRICT RULES:
+- Replies must be SHORT (1–3 lines max).
+- Be clear, confident, and helpful.
+- NEVER write long paragraphs.
+- Ask only ONE question at a time.
+- Be sales-focused but not pushy.
+- If the user asks to book a meeting, confirm briefly and guide them.
+- Avoid emojis overload (max 1 emoji per reply).
+
+Business Name:
 ${bot.name || "Our Business"}
 
-${bot.business_info || "We help customers."}
+Business Description:
+${bot.business_info || "We help customers with our services."}
     `.trim();
 
     const groqMessages = [
@@ -83,7 +96,7 @@ ${bot.business_info || "We help customers."}
 
       tokenCount++;
       res.write(`event: token\ndata: ${JSON.stringify(token)}\n\n`);
-      res.flush?.(); // ✅ FORCE PUSH EACH TOKEN
+      res.flush?.();
     }
 
     if (tokenCount === 0) {
@@ -106,7 +119,7 @@ ${bot.business_info || "We help customers."}
     res.end();
   }
 
-  // ✅ CLEAN CLOSE IF CLIENT DISCONNECTS
+  // ✅ CLEAN CLOSE ON CLIENT DISCONNECT
   req.on("close", () => {
     clearInterval(heartbeat);
     res.end();
