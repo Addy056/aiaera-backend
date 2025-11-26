@@ -12,9 +12,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 ============================================================ */
 
 router.get("/preview-stream/:id", async (req, res) => {
-  /* ------------------------------------------------------------------
-     ✅ 1. SET SSE HEADERS FIRST (BEFORE ANY LOGIC OR ERRORS)
-  ------------------------------------------------------------------ */
+  /* ✅ SET SSE HEADERS FIRST */
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -31,7 +29,7 @@ router.get("/preview-stream/:id", async (req, res) => {
     }
 
     /* ---------------------------------------------------------
-       2️⃣ LOAD CHATBOT CONFIG
+       1️⃣ LOAD CHATBOT CONFIG
     ----------------------------------------------------------*/
     const { data: bot, error: botErr } = await supabase
       .from("chatbots")
@@ -44,7 +42,6 @@ router.get("/preview-stream/:id", async (req, res) => {
       return res.end();
     }
 
-    // Safe config parsing
     let cfg = {};
     try {
       cfg = typeof bot.config === "string" ? JSON.parse(bot.config) : bot.config || {};
@@ -53,7 +50,7 @@ router.get("/preview-stream/:id", async (req, res) => {
     }
 
     /* ---------------------------------------------------------
-       3️⃣ LOAD INTEGRATIONS
+       2️⃣ LOAD INTEGRATIONS
     ----------------------------------------------------------*/
     const { data: integ } = await supabase
       .from("user_integrations")
@@ -62,7 +59,7 @@ router.get("/preview-stream/:id", async (req, res) => {
       .maybeSingle();
 
     /* ---------------------------------------------------------
-       4️⃣ LOAD FILE DATA
+       3️⃣ LOAD FILE DATA
     ----------------------------------------------------------*/
     let fileText = "";
 
@@ -80,7 +77,7 @@ router.get("/preview-stream/:id", async (req, res) => {
     }
 
     /* ---------------------------------------------------------
-       5️⃣ PARSE INCOMING MESSAGES
+       4️⃣ PARSE INCOMING MESSAGES (✅ UNICODE SAFE)
     ----------------------------------------------------------*/
     const raw = req.query.messages;
 
@@ -90,20 +87,27 @@ router.get("/preview-stream/:id", async (req, res) => {
     }
 
     let messages = [];
+
     try {
-      messages = JSON.parse(
-        Buffer.from(raw, "base64").toString("utf-8")
-      );
-    } catch (err) {
-      console.error("❌ Failed parsing messages:", err);
-      res.write(`event: done\ndata: {}\n\n`);
-      return res.end();
+      // ✅ First try new safe encoding
+      messages = JSON.parse(decodeURIComponent(raw));
+    } catch {
+      try {
+        // ✅ Fallback to old base64
+        messages = JSON.parse(
+          Buffer.from(raw, "base64").toString("utf-8")
+        );
+      } catch (err) {
+        console.error("❌ Failed parsing messages:", err);
+        res.write(`event: done\ndata: {}\n\n`);
+        return res.end();
+      }
     }
 
     const memory = messages.slice(-10);
 
     /* ---------------------------------------------------------
-       6️⃣ BUILD BUSINESS PROMPT
+       5️⃣ BUILD BUSINESS PROMPT
     ----------------------------------------------------------*/
     const businessName = bot.name || cfg.name || "Our Business";
     const businessDescription =
@@ -150,7 +154,7 @@ Rules:
     ];
 
     /* ---------------------------------------------------------
-       7️⃣ STREAM AI RESPONSE (GROQ)
+       6️⃣ STREAM AI RESPONSE (GROQ)
     ----------------------------------------------------------*/
     const stream = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
@@ -164,7 +168,6 @@ Rules:
       res.write(`event: token\ndata: ${JSON.stringify(token)}\n\n`);
     }
 
-    // ✅ Proper stream end
     res.write(`event: done\ndata: {}\n\n`);
     res.end();
   } catch (err) {
