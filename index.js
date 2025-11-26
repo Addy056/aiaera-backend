@@ -19,7 +19,7 @@ import paymentRouter from "./routes/payment.js";
 import integrationsRouter from "./routes/integrations.js";
 import embedRouter from "./routes/embed.js";
 import chatbotRouter from "./routes/chatbot.js";
-import chatbotStream from "./routes/chatbotStream.js"; // ⭐ NEW STREAM ROUTE
+import chatbotPreviewStream from "./routes/chatbotPreviewStream.js";
 import cleanupContextRouter from "./routes/cleanupContext.js";
 
 // 🆕 External Webhooks (Meta)
@@ -115,7 +115,7 @@ app.use("/api/chatbot", chatbotRouter);
 // ----------------------
 // 🚀 STREAMING ROUTE (must be before 404 handler)
 // ----------------------
-app.use("/api/chatbot", chatbotStream);
+app.use("/api/chatbot", chatbotPreviewStream);
 
 console.log("💬 Chatbot + Stream routes active");
 
