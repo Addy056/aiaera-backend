@@ -6,56 +6,55 @@ const router = express.Router();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.get("/preview-stream/:id", async (req, res) => {
-  // ✅ ABSOLUTE REQUIRED SSE HEADERS
+  // ✅ SSE HEADERS (BEFORE ANY ASYNC)
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-Accel-Buffering", "no"); // ✅ disables proxy buffering
   res.flushHeaders();
 
-  const safeEnd = () => {
+  // ✅ IMMEDIATE FIRST FLUSH (CRITICAL FOR RENDER/CLOUDFLARE)
+  res.write(`event: open\ndata: "connected"\n\n`);
+
+  // ✅ HEARTBEAT EVERY 10s TO PREVENT BUFFERING
+  const heartbeat = setInterval(() => {
     try {
-      res.write(`event: done\ndata: {}\n\n`);
-      res.end();
+      res.write(`event: ping\ndata: "keepalive"\n\n`);
     } catch (_) {}
-  };
+  }, 10000);
 
   try {
     const chatbotId = req.params.id;
     const raw = req.query.messages;
 
     if (!chatbotId || !raw) {
-      res.write(`event: token\ndata: "Invalid stream request."\n\n`);
-      return safeEnd(); // ✅ HARD RETURN
+      res.write(`event: token\ndata: "Invalid request."\n\n`);
+      res.write(`event: done\ndata: {}\n\n`);
+      clearInterval(heartbeat);
+      return res.end();
     }
 
-    // ✅ SAFE PARSE (NO THROWS LEAKING TO EXPRESS)
+    // ✅ SAFE PARSE
     let messages = [];
     try {
-      const decoded = decodeURIComponent(raw);
-      messages = JSON.parse(decoded);
+      messages = JSON.parse(decodeURIComponent(raw));
     } catch {
-      try {
-        messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
-      } catch {
-        res.write(`event: token\ndata: "Invalid message payload."\n\n`);
-        return safeEnd(); // ✅ HARD RETURN
-      }
+      messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
     }
 
     const { data: bot, error } = await supabase
       .from("chatbots")
-      .select("*")
+      .select("name, business_info")
       .eq("id", chatbotId)
       .single();
 
     if (error || !bot) {
       res.write(`event: token\ndata: "Chatbot not found."\n\n`);
-      return safeEnd(); // ✅ HARD RETURN
+      res.write(`event: done\ndata: {}\n\n`);
+      clearInterval(heartbeat);
+      return res.end();
     }
-
-    const memory = Array.isArray(messages) ? messages.slice(-10) : [];
 
     const systemPrompt = `
 You are the official AI assistant for the business:
@@ -66,38 +65,52 @@ ${bot.business_info || "We help customers."}
 
     const groqMessages = [
       { role: "system", content: systemPrompt },
-      ...memory,
+      ...messages.slice(-10),
     ];
 
+    // ✅ START GROQ STREAM
     const stream = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: groqMessages,
       stream: true,
     });
 
-    // ✅ HANDLE CLIENT DISCONNECT BEFORE STREAMING
-    req.on("close", () => {
-      safeEnd();
-    });
+    let tokenCount = 0;
 
-    // ✅ STREAM TOKENS
     for await (const chunk of stream) {
       const token = chunk?.choices?.[0]?.delta?.content;
       if (!token) continue;
 
+      tokenCount++;
       res.write(`event: token\ndata: ${JSON.stringify(token)}\n\n`);
+      res.flush?.(); // ✅ FORCE PUSH EACH TOKEN
     }
 
-    safeEnd(); // ✅ ALWAYS END CLEANLY
+    if (tokenCount === 0) {
+      res.write(`event: token\ndata: "⚠️ No response generated."\n\n`);
+    }
+
+    res.write(`event: done\ndata: {}\n\n`);
+    clearInterval(heartbeat);
+    res.end();
 
   } catch (err) {
     console.error("🔥 Preview Stream Error:", err);
 
     try {
       res.write(`event: token\ndata: "⚠️ Stream failed."\n\n`);
-      safeEnd();
+      res.write(`event: done\ndata: {}\n\n`);
     } catch (_) {}
+
+    clearInterval(heartbeat);
+    res.end();
   }
+
+  // ✅ CLEAN CLOSE IF CLIENT DISCONNECTS
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    res.end();
+  });
 });
 
 export default router;
