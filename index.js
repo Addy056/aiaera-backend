@@ -22,7 +22,7 @@ import chatbotRouter from "./routes/chatbot.js";
 import chatbotPreviewStream from "./routes/chatbotPreviewStream.js";
 import cleanupContextRouter from "./routes/cleanupContext.js";
 
-// 🆕 External Webhooks (Meta)
+// External Webhooks
 import whatsappWebhookRouter from "./routes/webhooks/whatsapp.js";
 import facebookWebhookRouter from "./routes/webhooks/facebook.js";
 import instagramWebhookRouter from "./routes/webhooks/instagram.js";
@@ -49,17 +49,17 @@ app.use(
 );
 
 // ----------------------
-// ✅ STREAM-SAFE COMPRESSION (CRITICAL FIX)
+// ✅ STREAM-SAFE COMPRESSION
 // ----------------------
 app.use((req, res, next) => {
   if (req.path.includes("/preview-stream")) {
-    return next(); // ❌ Disable compression for SSE
+    return next(); // DO NOT compress SSE
   }
   return compression()(req, res, next);
 });
 
 // ----------------------
-// CORS (safe multi-domain mode)
+// CORS
 // ----------------------
 app.use(
   cors({
@@ -70,12 +70,12 @@ app.use(
 );
 
 // ----------------------
-// Razorpay webhook (raw body)
+// Razorpay webhook raw body
 // ----------------------
 app.use("/api/payment-webhook", express.raw({ type: "*/*" }));
 
 // ----------------------
-// JSON parser (after raw)
+// JSON parser
 // ----------------------
 app.use(express.json({ limit: "25mb" }));
 app.use(express.urlencoded({ extended: true, limit: "25mb" }));
@@ -88,7 +88,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // ----------------------
-// Health route
+// Health check
 // ----------------------
 app.get("/", (req, res) => {
   res.json({
@@ -99,10 +99,8 @@ app.get("/", (req, res) => {
 });
 
 // ----------------------
-// Mount CORE Routes
+// Core API Routes
 // ----------------------
-console.log("🚀 Mounting all core API routes...");
-
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/leads", leadsRouter);
@@ -115,18 +113,16 @@ app.use("/api/cleanup-context", cleanupContextRouter);
 app.use("/api/embed", embedRouter);
 
 // ----------------------
-// Chatbot Main Routes
-// ----------------------
-app.use("/api/chatbot", chatbotRouter);
-
-// ----------------------
-// 🚀 ✅ STREAMING ROUTE (MUST BE BEFORE 404)
+// ✅✅✅ PUBLIC STREAM ROUTE (NO AUTH - MUST BE FIRST)
 // FINAL URL:
 // /api/chatbot/preview-stream/:id
 // ----------------------
 app.use("/api/chatbot", chatbotPreviewStream);
 
-console.log("💬 Chatbot + Stream routes active");
+// ----------------------
+// 🔒 PROTECTED CHATBOT ROUTES (AFTER STREAM)
+// ----------------------
+app.use("/api/chatbot", chatbotRouter);
 
 // ----------------------
 // Meta Webhooks
@@ -135,13 +131,10 @@ app.use("/api/webhooks/whatsapp", whatsappWebhookRouter);
 app.use("/api/webhooks/facebook", facebookWebhookRouter);
 app.use("/api/webhooks/instagram", instagramWebhookRouter);
 
-console.log("📡 WhatsApp/Facebook/Instagram webhooks active");
-
 // ----------------------
 // 404 Handler
 // ----------------------
 app.use((req, res) => {
-  console.warn(`⚠️ 404 Not Found: ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     error: "Route not found",
@@ -159,7 +152,6 @@ app.use(errorHandler);
 // ----------------------
 app.listen(PORT, () => {
   console.log(`🚀 AIAERA backend running on port ${PORT}`);
-  console.log("✅ All routes loaded successfully");
 });
 
 export default app;

@@ -6,29 +6,42 @@ const router = express.Router();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.get("/preview-stream/:id", async (req, res) => {
-  // ✅ MUST BE BEFORE TRY BLOCK — VERY IMPORTANT
+  // ✅ ABSOLUTE REQUIRED SSE HEADERS
   res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no"); // ✅ Prevent reverse proxy buffering
+  res.setHeader("X-Accel-Buffering", "no");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.flushHeaders();
+
+  const safeEnd = () => {
+    try {
+      res.write(`event: done\ndata: {}\n\n`);
+      res.end();
+    } catch (_) {}
+  };
 
   try {
     const chatbotId = req.params.id;
     const raw = req.query.messages;
 
-    if (!raw || !chatbotId) {
-      res.write(`event: done\ndata: {}\n\n`);
-      return;
+    if (!chatbotId || !raw) {
+      res.write(`event: token\ndata: "Invalid stream request."\n\n`);
+      return safeEnd(); // ✅ HARD RETURN
     }
 
-    // ✅ Safe Unicode Parse
+    // ✅ SAFE PARSE (NO THROWS LEAKING TO EXPRESS)
     let messages = [];
     try {
-      messages = JSON.parse(decodeURIComponent(raw));
+      const decoded = decodeURIComponent(raw);
+      messages = JSON.parse(decoded);
     } catch {
-      messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
+      try {
+        messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
+      } catch {
+        res.write(`event: token\ndata: "Invalid message payload."\n\n`);
+        return safeEnd(); // ✅ HARD RETURN
+      }
     }
 
     const { data: bot, error } = await supabase
@@ -39,11 +52,10 @@ router.get("/preview-stream/:id", async (req, res) => {
 
     if (error || !bot) {
       res.write(`event: token\ndata: "Chatbot not found."\n\n`);
-      res.write(`event: done\ndata: {}\n\n`);
-      return;
+      return safeEnd(); // ✅ HARD RETURN
     }
 
-    const memory = messages.slice(-10);
+    const memory = Array.isArray(messages) ? messages.slice(-10) : [];
 
     const systemPrompt = `
 You are the official AI assistant for the business:
@@ -63,7 +75,12 @@ ${bot.business_info || "We help customers."}
       stream: true,
     });
 
-    // ✅ Stream tokens properly
+    // ✅ HANDLE CLIENT DISCONNECT BEFORE STREAMING
+    req.on("close", () => {
+      safeEnd();
+    });
+
+    // ✅ STREAM TOKENS
     for await (const chunk of stream) {
       const token = chunk?.choices?.[0]?.delta?.content;
       if (!token) continue;
@@ -71,22 +88,14 @@ ${bot.business_info || "We help customers."}
       res.write(`event: token\ndata: ${JSON.stringify(token)}\n\n`);
     }
 
-    res.write(`event: done\ndata: {}\n\n`);
-    res.end();
-
-    // ✅ Close if client disconnects
-    req.on("close", () => {
-      res.end();
-    });
+    safeEnd(); // ✅ ALWAYS END CLEANLY
 
   } catch (err) {
     console.error("🔥 Preview Stream Error:", err);
 
-    // ✅ NEVER send JSON/HTML in SSE error
     try {
       res.write(`event: token\ndata: "⚠️ Stream failed."\n\n`);
-      res.write(`event: done\ndata: {}\n\n`);
-      res.end();
+      safeEnd();
     } catch (_) {}
   }
 });
