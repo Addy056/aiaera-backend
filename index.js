@@ -38,24 +38,32 @@ const PORT = process.env.PORT || 5000;
 app.set("trust proxy", 1);
 
 // ----------------------
-// Security & Performance
+// Security (iframe + SSE safe)
 // ----------------------
 app.use(
   helmet({
-    contentSecurityPolicy: false, // required for iframe + SSE
+    contentSecurityPolicy: false,
     crossOriginResourcePolicy: false,
-    frameguard: false, // allow embedding chatbot on other domains
+    frameguard: false,
   })
 );
 
-app.use(compression());
+// ----------------------
+// ✅ STREAM-SAFE COMPRESSION (CRITICAL FIX)
+// ----------------------
+app.use((req, res, next) => {
+  if (req.path.includes("/preview-stream")) {
+    return next(); // ❌ Disable compression for SSE
+  }
+  return compression()(req, res, next);
+});
 
 // ----------------------
 // CORS (safe multi-domain mode)
 // ----------------------
 app.use(
   cors({
-    origin: "*", // ANY DOMAIN CAN EMBED IFRAME
+    origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -104,7 +112,6 @@ app.use("/api/payment-webhook", paymentWebhookRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/integrations", integrationsRouter);
 app.use("/api/cleanup-context", cleanupContextRouter);
-
 app.use("/api/embed", embedRouter);
 
 // ----------------------
@@ -113,7 +120,9 @@ app.use("/api/embed", embedRouter);
 app.use("/api/chatbot", chatbotRouter);
 
 // ----------------------
-// 🚀 STREAMING ROUTE (must be before 404 handler)
+// 🚀 ✅ STREAMING ROUTE (MUST BE BEFORE 404)
+// FINAL URL:
+// /api/chatbot/preview-stream/:id
 // ----------------------
 app.use("/api/chatbot", chatbotPreviewStream);
 

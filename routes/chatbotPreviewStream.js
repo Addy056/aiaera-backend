@@ -6,9 +6,11 @@ const router = express.Router();
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 router.get("/preview-stream/:id", async (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
+  // ✅ MUST BE BEFORE TRY BLOCK — VERY IMPORTANT
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // ✅ Prevent reverse proxy buffering
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.flushHeaders();
 
@@ -18,10 +20,10 @@ router.get("/preview-stream/:id", async (req, res) => {
 
     if (!raw || !chatbotId) {
       res.write(`event: done\ndata: {}\n\n`);
-      return res.end();
+      return;
     }
 
-    // ✅ Unicode-safe parse
+    // ✅ Safe Unicode Parse
     let messages = [];
     try {
       messages = JSON.parse(decodeURIComponent(raw));
@@ -29,22 +31,26 @@ router.get("/preview-stream/:id", async (req, res) => {
       messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
     }
 
-    const { data: bot } = await supabase
+    const { data: bot, error } = await supabase
       .from("chatbots")
       .select("*")
       .eq("id", chatbotId)
       .single();
 
-    let cfg = bot?.config || {};
+    if (error || !bot) {
+      res.write(`event: token\ndata: "Chatbot not found."\n\n`);
+      res.write(`event: done\ndata: {}\n\n`);
+      return;
+    }
 
     const memory = messages.slice(-10);
 
     const systemPrompt = `
 You are the official AI assistant for the business:
-${bot?.name || "Our Business"}
+${bot.name || "Our Business"}
 
-${bot?.business_info || "We help customers."}
-`;
+${bot.business_info || "We help customers."}
+    `.trim();
 
     const groqMessages = [
       { role: "system", content: systemPrompt },
@@ -57,17 +63,31 @@ ${bot?.business_info || "We help customers."}
       stream: true,
     });
 
+    // ✅ Stream tokens properly
     for await (const chunk of stream) {
-      const token = chunk?.choices?.[0]?.delta?.content || "";
+      const token = chunk?.choices?.[0]?.delta?.content;
       if (!token) continue;
+
       res.write(`event: token\ndata: ${JSON.stringify(token)}\n\n`);
     }
 
     res.write(`event: done\ndata: {}\n\n`);
     res.end();
+
+    // ✅ Close if client disconnects
+    req.on("close", () => {
+      res.end();
+    });
+
   } catch (err) {
     console.error("🔥 Preview Stream Error:", err);
-    res.end();
+
+    // ✅ NEVER send JSON/HTML in SSE error
+    try {
+      res.write(`event: token\ndata: "⚠️ Stream failed."\n\n`);
+      res.write(`event: done\ndata: {}\n\n`);
+      res.end();
+    } catch (_) {}
   }
 });
 
