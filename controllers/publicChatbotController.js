@@ -1,5 +1,4 @@
-// backend/controllers/publicChatbotController.js
-import supabase from "../config/supabaseClient.js";
+import { supabase } from "../config/supabaseClient.js";
 
 /* -------------------------------------------------------
  * Helper: Make Google Maps URL
@@ -16,46 +15,79 @@ export const getPublicChatbot = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!id)
-      return res.status(400).json({ success: false, error: "Chatbot ID is required" });
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "Chatbot ID is required",
+      });
+    }
+
+    console.log("✅ Public chatbot request for ID:", id);
 
     /* ----------------------------------------------
-     * Load chatbot
+     * Load chatbot (STRICT)
      * ---------------------------------------------- */
     const { data: bot, error: botErr } = await supabase
       .from("chatbots")
       .select("*")
       .eq("id", id)
-      .maybeSingle();
+      .single(); // ✅ STRICT lookup
 
-    if (botErr || !bot) {
-      return res.status(404).json({ success: false, error: "Chatbot not found" });
+    if (botErr) {
+      console.error("❌ Supabase chatbot fetch error:", botErr);
+      return res.status(404).json({
+        success: false,
+        error: "Chatbot not found",
+      });
     }
 
+    if (!bot) {
+      return res.status(404).json({
+        success: false,
+        error: "Chatbot not found",
+      });
+    }
+
+    /* ----------------------------------------------
+     * Parse config safely
+     * ---------------------------------------------- */
     let cfg = {};
     try {
-      cfg = typeof bot.config === "string" ? JSON.parse(bot.config) : bot.config || {};
-    } catch {
+      cfg =
+        typeof bot.config === "string"
+          ? JSON.parse(bot.config)
+          : bot.config || {};
+    } catch (e) {
+      console.warn("⚠️ Invalid chatbot config JSON");
       cfg = {};
     }
 
     /* ----------------------------------------------
      * Load Integrations
      * ---------------------------------------------- */
-    const { data: integ } = await supabase
+    const { data: integ, error: integErr } = await supabase
       .from("user_integrations")
       .select("*")
       .eq("user_id", bot.user_id)
       .maybeSingle();
 
+    if (integErr) {
+      console.warn("⚠️ Integration fetch error:", integErr.message);
+    }
+
     /* ----------------------------------------------
      * Load File Data (parsed text)
      * ---------------------------------------------- */
     let allFileText = "";
-    const { data: parsedFiles } = await supabase
+
+    const { data: parsedFiles, error: fileErr } = await supabase
       .from("chatbot_file_data")
       .select("content")
       .eq("chatbot_id", id);
+
+    if (fileErr) {
+      console.warn("⚠️ File data fetch error:", fileErr.message);
+    }
 
     if (Array.isArray(parsedFiles)) {
       parsedFiles.forEach((f) => {
@@ -74,7 +106,7 @@ export const getPublicChatbot = async (req, res) => {
     );
 
     /* ----------------------------------------------
-     * Final normalized config
+     * Final normalized response
      * ---------------------------------------------- */
     const response = {
       id: bot.id,
@@ -94,15 +126,23 @@ export const getPublicChatbot = async (req, res) => {
       fileText: allFileText || "",
     };
 
-    return res.json({ success: true, data: response });
+    console.log("✅ Public chatbot loaded:", bot.id);
+
+    return res.json({
+      success: true,
+      data: response,
+    });
   } catch (err) {
-    console.error("❌ publicChatbotController Error:", err);
-    return res.status(500).json({ success: false, error: "Server Error" });
+    console.error("❌ publicChatbotController Fatal Error:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Server Error",
+    });
   }
 };
 
 /* -------------------------------------------------------
- * 2) PUBLIC MESSAGE (for NON-stream fallback — optional)
+ * 2) PUBLIC MESSAGE (fallback — optional)
  * ------------------------------------------------------- */
 export const sendPublicMessage = async (req, res) => {
   try {
@@ -112,6 +152,9 @@ export const sendPublicMessage = async (req, res) => {
     });
   } catch (err) {
     console.error("❌ sendPublicMessage Error:", err);
-    return res.status(500).json({ success: false, error: "Server Error" });
+    return res.status(500).json({
+      success: false,
+      error: "Server Error",
+    });
   }
 };
