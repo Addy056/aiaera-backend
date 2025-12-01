@@ -11,13 +11,13 @@ router.get("/preview-stream/:id", async (req, res) => {
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("X-Accel-Buffering", "no"); // Disable proxy buffering
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  // ✅ IMMEDIATE OPEN EVENT (PREVENTS MIME ISSUES)
+  // ✅ OPEN EVENT
   res.write(`event: open\ndata: "connected"\n\n`);
 
-  // ✅ HEARTBEAT TO KEEP CONNECTION ALIVE
+  // ✅ HEARTBEAT (PREVENTS RENDER / NGINX TIMEOUT)
   const heartbeat = setInterval(() => {
     try {
       res.write(`event: ping\ndata: "keepalive"\n\n`);
@@ -28,6 +28,7 @@ router.get("/preview-stream/:id", async (req, res) => {
     const chatbotId = req.params.id;
     const raw = req.query.messages;
 
+    // ✅ HARD VALIDATION
     if (!chatbotId || !raw) {
       res.write(`event: token\ndata: "Invalid request."\n\n`);
       res.write(`event: done\ndata: {}\n\n`);
@@ -35,14 +36,24 @@ router.get("/preview-stream/:id", async (req, res) => {
       return res.end();
     }
 
-    // ✅ SAFE MESSAGE PARSE
+    // ✅ SAFE MESSAGE PARSE (URL OR BASE64)
     let messages = [];
     try {
       messages = JSON.parse(decodeURIComponent(raw));
     } catch {
-      messages = JSON.parse(Buffer.from(raw, "base64").toString("utf-8"));
+      messages = JSON.parse(
+        Buffer.from(raw, "base64").toString("utf-8")
+      );
     }
 
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.write(`event: token\ndata: "Invalid message format."\n\n`);
+      res.write(`event: done\ndata: {}\n\n`);
+      clearInterval(heartbeat);
+      return res.end();
+    }
+
+    // ✅ LOAD CHATBOT
     const { data: bot, error } = await supabase
       .from("chatbots")
       .select("name, business_info")
@@ -56,7 +67,7 @@ router.get("/preview-stream/:id", async (req, res) => {
       return res.end();
     }
 
-    // ✅ ✅ SHORT, IMPACTFUL, SALES-FOCUSED PROMPT
+    // ✅ SYSTEM PROMPT
     const systemPrompt = `
 You are a professional business AI chatbot.
 
@@ -122,7 +133,6 @@ ${bot.business_info || "We help customers with our services."}
   // ✅ CLEAN CLOSE ON CLIENT DISCONNECT
   req.on("close", () => {
     clearInterval(heartbeat);
-    res.end();
   });
 });
 
