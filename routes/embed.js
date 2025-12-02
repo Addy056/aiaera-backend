@@ -17,9 +17,10 @@ router.get("/:id.js", async (req, res) => {
       .eq("id", chatbotId)
       .single();
 
+    res.setHeader("Content-Type", "application/javascript");
+
     if (error || !bot) {
-      res.setHeader("Content-Type", "application/javascript");
-      return res.send(`console.error("Chatbot not found");`);
+      return res.send(`console.error("❌ AIAERA: Chatbot not found");`);
     }
 
     let cfg = {};
@@ -31,93 +32,120 @@ router.get("/:id.js", async (req, res) => {
 
     const logo =
       cfg?.logo_url ||
-      "https://aiaera-frontend.vercel.app/logo.png"; // ✅ fallback logo
+      "https://aiaera-frontend.vercel.app/logo.png";
 
     const FRONTEND_URL = process.env.FRONTEND_URL;
 
-    res.setHeader("Content-Type", "application/javascript");
-
     return res.send(`
 (function () {
+  // ✅ Prevent multiple injections
+  if (window.__AIAERA_WIDGET_LOADED__) return;
+  window.__AIAERA_WIDGET_LOADED__ = true;
+
   var chatbotId = "${chatbotId}";
   var frontendUrl = "${FRONTEND_URL}";
   var logoUrl = "${logo}";
+  var isOpen = false;
 
   // ✅ Floating Launcher Button
   var launcher = document.createElement("div");
-  launcher.style.position = "fixed";
-  launcher.style.bottom = "20px";
-  launcher.style.right = "20px";
-  launcher.style.width = "60px";
-  launcher.style.height = "60px";
-  launcher.style.borderRadius = "50%";
-  launcher.style.background = "linear-gradient(135deg, #7f5af0, #5a3df0)";
-  launcher.style.display = "flex";
-  launcher.style.alignItems = "center";
-  launcher.style.justifyContent = "center";
-  launcher.style.cursor = "pointer";
-  launcher.style.boxShadow = "0 10px 30px rgba(0,0,0,0.4)";
-  launcher.style.zIndex = "999999";
-  launcher.style.transition = "transform 0.2s ease";
+  launcher.id = "aiaera-launcher";
+  launcher.style.cssText = \`
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7f5af0, #5a3df0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    z-index: 999999;
+    transition: transform 0.2s ease;
+  \`;
 
-  launcher.onmouseenter = function () {
-    launcher.style.transform = "scale(1.05)";
-  };
-  launcher.onmouseleave = function () {
-    launcher.style.transform = "scale(1)";
-  };
+  launcher.onmouseenter = () => launcher.style.transform = "scale(1.08)";
+  launcher.onmouseleave = () => launcher.style.transform = "scale(1)";
 
   var logo = document.createElement("img");
   logo.src = logoUrl;
-  logo.style.width = "34px";
-  logo.style.height = "34px";
-  logo.style.objectFit = "contain";
+  logo.style.cssText = "width:32px;height:32px;object-fit:contain;";
 
   launcher.appendChild(logo);
   document.body.appendChild(launcher);
 
-  // ✅ Chatbot Window
+  // ✅ Chatbot Container (Hidden by Default)
   var container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.bottom = "90px";
-  container.style.right = "20px";
-  container.style.width = "400px";
-  container.style.height = "520px";
-  container.style.borderRadius = "16px";
-  container.style.overflow = "hidden";
-  container.style.boxShadow = "0 20px 60px rgba(0,0,0,0.5)";
-  container.style.zIndex = "999999";
-  container.style.display = "none";
-  container.style.background = "transparent";
+  container.id = "aiaera-chat-container";
+  container.style.cssText = \`
+    position: fixed;
+    bottom: 95px;
+    right: 20px;
+    width: 380px;
+    height: 540px;
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    z-index: 999999;
+    display: none;
+    background: transparent;
+  \`;
 
+  // ✅ Iframe
   var iframe = document.createElement("iframe");
   iframe.src = frontendUrl + "/public-chatbot/" + chatbotId;
-  iframe.style.width = "100%";
-  iframe.style.height = "100%";
-  iframe.style.border = "none";
+  iframe.style.cssText = "width:100%;height:100%;border:none;";
   iframe.allow = "clipboard-write; microphone; camera";
 
   container.appendChild(iframe);
   document.body.appendChild(container);
 
-  // ✅ Toggle Logic
-  var open = false;
-
-  launcher.onclick = function () {
-    if (!open) {
+  // ✅ Toggle Function
+  function toggleChat() {
+    if (!isOpen) {
       container.style.display = "block";
-      open = true;
+      isOpen = true;
     } else {
       container.style.display = "none";
-      open = false;
+      isOpen = false;
     }
-  };
+  }
+
+  launcher.onclick = toggleChat;
+
+  // ✅ Close on ESC key
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && isOpen) {
+      toggleChat();
+    }
+  });
+
+  // ✅ Mobile Responsive
+  function handleResize() {
+    if (window.innerWidth < 500) {
+      container.style.width = "95vw";
+      container.style.height = "85vh";
+      container.style.right = "2.5vw";
+      container.style.bottom = "80px";
+    } else {
+      container.style.width = "380px";
+      container.style.height = "540px";
+      container.style.right = "20px";
+      container.style.bottom = "95px";
+    }
+  }
+
+  handleResize();
+  window.addEventListener("resize", handleResize);
 })();
 `);
   } catch (err) {
-    console.error("Embed script error:", err);
+    console.error("❌ Embed script error:", err);
     res.setHeader("Content-Type", "application/javascript");
-    return res.send(`console.error("Embed failed");`);
+    return res.send(`console.error("AIAERA embed failed");`);
   }
 });
 
