@@ -1,11 +1,10 @@
-// backend/routes/embed.js
 import express from "express";
 import supabase from "../config/supabaseClient.js";
 
 const router = express.Router();
 
 /* --------------------------------------------------- */
-/* ✅ SERVE EMBED SCRIPT (.js) WITH FLOATING BUTTON */
+/* ✅ SERVE EMBED SCRIPT (.js) WITH FULL CIRCLE LOGO */
 /* --------------------------------------------------- */
 router.get("/:id.js", async (req, res) => {
   try {
@@ -25,7 +24,8 @@ router.get("/:id.js", async (req, res) => {
 
     let cfg = {};
     try {
-      cfg = typeof bot.config === "string" ? JSON.parse(bot.config) : bot.config;
+      cfg =
+        typeof bot.config === "string" ? JSON.parse(bot.config) : bot.config;
     } catch {
       cfg = {};
     }
@@ -47,7 +47,7 @@ router.get("/:id.js", async (req, res) => {
   var logoUrl = "${logo}";
   var isOpen = false;
 
-  // ✅ Floating Launcher Button
+  // ✅ Floating Launcher Button (Full Logo Circle)
   var launcher = document.createElement("div");
   launcher.id = "aiaera-launcher";
   launcher.style.cssText = \`
@@ -57,12 +57,15 @@ router.get("/:id.js", async (req, res) => {
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #7f5af0, #5a3df0);
+    background-image: url("\${logoUrl}");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 0 0 2px rgba(255,255,255,0.15);
     z-index: 999999;
     transition: transform 0.2s ease;
   \`;
@@ -70,11 +73,6 @@ router.get("/:id.js", async (req, res) => {
   launcher.onmouseenter = () => launcher.style.transform = "scale(1.08)";
   launcher.onmouseleave = () => launcher.style.transform = "scale(1)";
 
-  var logo = document.createElement("img");
-  logo.src = logoUrl;
-  logo.style.cssText = "width:32px;height:32px;object-fit:contain;";
-
-  launcher.appendChild(logo);
   document.body.appendChild(launcher);
 
   // ✅ Chatbot Container (Hidden by Default)
