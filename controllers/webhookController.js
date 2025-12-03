@@ -1,6 +1,8 @@
-// backend/controllers/metaWebhookController.js
-import axios from "axios";
 import supabase from "../config/supabaseClient.js";
+import { sendWhatsappMessage } from "../utils/sendWhatsappMessage.js";
+import { sendFacebookMessage } from "../utils/sendFacebookMessage.js";
+import { sendInstagramMessage } from "../utils/sendInstagramMessage.js";
+import axios from "axios";
 
 /* ------------------------------------------------------
  * 1) VERIFY META WEBHOOK
@@ -26,17 +28,11 @@ export const verifyMetaWebhook = (req, res) => {
 };
 
 /* ------------------------------------------------------
- * 2) HANDLE META (WA / FB / IG) MESSAGES
+ * 2) HANDLE META (WA / FB / IG)
  * ------------------------------------------------------ */
-export const handleMetaWebhook = async (req, res) => {
+export const handleMetaWebhook = async (body) => {
   try {
-    const GRAPH_VERSION = process.env.META_API_VERSION || "v19.0";
-    const body = req.body;
-
-    // Always acknowledge ASAP to avoid Meta retries
-    res.sendStatus(200);
-
-    if (!body.object || !Array.isArray(body.entry)) return;
+    if (!body?.object || !Array.isArray(body.entry)) return;
 
     for (const entry of body.entry) {
       const changes = entry.changes || [];
@@ -45,136 +41,264 @@ export const handleMetaWebhook = async (req, res) => {
         const value = change.value;
         if (!value) continue;
 
-        const phoneNumberId = value.metadata?.phone_number_id; // WA number ID
-        const messages = value.messages || [];
+        // ✅ IGNORE DELIVERY / STATUS EVENTS
+        if (value.statuses || !value.messages?.length) continue;
 
-        if (!messages.length || !phoneNumberId) continue;
+        let platform = null;
+        let senderId = null;
+        let messageText = null;
+        let platformIdentifier = null;
+        let messageId = null;
 
-        for (const msg of messages) {
-          const from = msg.from; // sender phone/id
-          const text =
-            msg.text?.body ||
-            msg.message?.text ||
-            msg.message ||
-            "";
+        /* ---------------------- */
+        /* ✅ WHATSAPP */
+        /* ---------------------- */
+        if (value.metadata?.phone_number_id && value.messages?.length) {
+          const msg = value.messages[0];
+          platform = "whatsapp";
+          senderId = msg.from;
+          messageText = msg.text?.body || "";
+          platformIdentifier = value.metadata.phone_number_id; // ✅ PHONE NUMBER ID
+          messageId = msg.id;
+        }
 
-          const messageId = msg.id;
-          if (!from || !messageId) continue;
+        /* ---------------------- */
+        /* ✅ FACEBOOK */
+        /* ---------------------- */
+        else if (
+          change.field === "messages" &&
+          value.sender?.id &&
+          value.message?.text
+        ) {
+          platform = "facebook";
+          senderId = value.sender.id;
+          messageText = value.message.text;
+          platformIdentifier = value.recipient?.id;
+          messageId = value.message.mid;
+        }
 
-          /* ----------------------------------------
-           * A) Prevent duplicate replies
-           * ---------------------------------------- */
-          const { data: handled } = await supabase
-            .from("messages_handled")
-            .select("message_id")
-            .eq("message_id", messageId)
-            .maybeSingle();
+        /* ---------------------- */
+        /* ✅ INSTAGRAM */
+        /* ---------------------- */
+        else if (
+          change.field === "instagram" &&
+          value.sender?.id &&
+          value.message?.text
+        ) {
+          platform = "instagram";
+          senderId = value.sender.id;
+          messageText = value.message.text;
+          platformIdentifier = value.recipient?.id;
+          messageId = value.message.id; // ✅ REAL ID
+        }
 
-          if (handled) continue;
+        if (!platform || !senderId || !messageText || !platformIdentifier || !messageId)
+          continue;
 
-          /* ----------------------------------------
-           * B) Look up integration (WhatsApp)
-           * ---------------------------------------- */
-          const { data: integ, error: integErr } = await supabase
-            .from("user_integrations")
-            .select(
-              `
-              *,
-              user_subscriptions ( expires_at )
-            `
-            )
-            .eq("whatsapp_number", phoneNumberId)
-            .maybeSingle();
+        /* ---------------------- */
+        /* ✅ DUPLICATE CHECK */
+        /* ---------------------- */
+        const { data: alreadyHandled } = await supabase
+          .from("messages_handled")
+          .select("message_id")
+          .eq("message_id", messageId)
+          .maybeSingle();
 
-          if (integErr) {
-            console.error("❌ Integration lookup error:", integErr.message);
-            continue;
-          }
+        if (alreadyHandled) continue;
 
-          if (!integ) {
-            console.warn(
-              `⚠️ No integration found for WA phone_number_id: ${phoneNumberId}`
+        /* ---------------------- */
+        /* ✅ GET USER INTEGRATION */
+        /* ---------------------- */
+        let integrationQuery = supabase
+          .from("user_integrations")
+          .select("*");
+
+        if (platform === "whatsapp") {
+          integrationQuery = integrationQuery.eq(
+            "whatsapp_number",
+            platformIdentifier
+          );
+        }
+
+        if (platform === "facebook") {
+          integrationQuery = integrationQuery.eq(
+            "fb_page_id",
+            platformIdentifier
+          );
+        }
+
+        if (platform === "instagram") {
+          integrationQuery = integrationQuery.eq(
+            "instagram_page_id",
+            platformIdentifier
+          );
+        }
+
+        const { data: integration } = await integrationQuery.maybeSingle();
+        if (!integration) continue;
+
+        /* ---------------------- */
+        /* ✅ SUBSCRIPTION CHECK */
+        /* ---------------------- */
+        const { data: sub } = await supabase
+          .from("user_subscriptions")
+          .select("expires_at")
+          .eq("user_id", integration.user_id)
+          .maybeSingle();
+
+        const isActive =
+          sub?.expires_at && new Date(sub.expires_at) > new Date();
+
+        if (!isActive) {
+          const expiredMsg =
+            "⚠️ This business’s AI automation subscription has expired. Please contact the business.";
+
+          if (platform === "whatsapp") {
+            await sendWhatsappMessage(
+              integration.whatsapp_number,
+              integration.whatsapp_token,
+              senderId,
+              expiredMsg
             );
-            continue;
           }
-
-          /* ----------------------------------------
-           * C) Check Subscription
-           * ---------------------------------------- */
-          const expires = integ.user_subscriptions?.expires_at;
-          const isActive = expires && new Date(expires) > new Date();
-
-          if (!isActive) {
-            console.warn(
-              `⚠️ Subscription expired for user ${integ.user_id}`
+          if (platform === "facebook") {
+            await sendFacebookMessage(
+              integration.fb_page_id,
+              integration.fb_page_token,
+              senderId,
+              expiredMsg
             );
-            continue;
+          }
+          if (platform === "instagram") {
+            await sendInstagramMessage(
+              integration.instagram_page_id,
+              integration.instagram_access_token,
+              senderId,
+              expiredMsg
+            );
           }
 
-          /* ----------------------------------------
-           * D) Generate reply
-           * ---------------------------------------- */
-          let replyText =
-            integ.auto_reply_message ||
-            `Thanks for messaging us!`;
+          continue;
+        }
 
-          // Smart rules
-          const lc = text.toLowerCase();
+        /* ---------------------- */
+        /* ✅ BOOKING INTENT */
+        /* ---------------------- */
+        const lc = messageText.toLowerCase();
+        const bookingKeywords = [
+          "book",
+          "appointment",
+          "meeting",
+          "schedule",
+          "demo",
+          "call",
+        ];
 
-          // If user asks for location
-          if (lc.includes("where") || lc.includes("location")) {
-            if (integ.business_address) {
-              replyText = `📍 Our location:\n${integ.business_address}`;
-            }
+        const isBookingIntent = bookingKeywords.some((k) =>
+          lc.includes(k)
+        );
+
+        if (isBookingIntent && integration.calendly_link) {
+          const bookingReply = `📅 You can book your meeting here:\n${integration.calendly_link}`;
+
+          if (platform === "whatsapp") {
+            await sendWhatsappMessage(
+              integration.whatsapp_number,
+              integration.whatsapp_token,
+              senderId,
+              bookingReply
+            );
           }
 
-          // If user asks for booking
-          if (
-            ["book", "appointment", "schedule", "meeting", "demo"].some((k) =>
-              lc.includes(k)
-            )
-          ) {
-            if (integ.calendly_link) {
-              replyText = `📅 Book a meeting:\n${integ.calendly_link}`;
-            } else {
-              replyText =
-                "We don't have a booking link added yet. You can message us your preferred timing.";
-            }
+          if (platform === "facebook") {
+            await sendFacebookMessage(
+              integration.fb_page_id,
+              integration.fb_page_token,
+              senderId,
+              bookingReply
+            );
           }
 
-          /* ----------------------------------------
-           * E) Send Auto Reply (WhatsApp)
-           * ---------------------------------------- */
+          if (platform === "instagram") {
+            await sendInstagramMessage(
+              integration.instagram_page_id,
+              integration.instagram_access_token,
+              senderId,
+              bookingReply
+            );
+          }
+
+          await supabase.from("appointments").insert({
+            user_id: integration.user_id,
+            chatbot_id: null,
+            customer_name: null,
+            customer_email: null,
+            calendly_event_link: integration.calendly_link,
+          });
+        } else {
+          /* ---------------------- */
+          /* ✅ AI REPLY (GROQ) */
+          /* ---------------------- */
+          let replyText = "Thanks for your message!";
+
           try {
-            await axios.post(
-              `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`,
+            const aiRes = await axios.post(
+              "https://api.groq.com/openai/v1/chat/completions",
               {
-                messaging_product: "whatsapp",
-                to: from,
-                text: { body: replyText },
+                model: "llama3-8b-8192",
+                messages: [
+                  { role: "system", content: "You are a helpful business assistant." },
+                  { role: "user", content: messageText },
+                ],
               },
               {
                 headers: {
-                  Authorization: `Bearer ${integ.whatsapp_token}`,
+                  Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
                   "Content-Type": "application/json",
                 },
+                timeout: 15000,
               }
             );
 
-            console.log(`✅ Auto-replied to: ${from}`);
-          } catch (sendErr) {
-            console.error("❌ Failed to send WA reply:", sendErr.message);
-            continue;
+            replyText =
+              aiRes.data?.choices?.[0]?.message?.content || replyText;
+          } catch (aiErr) {
+            console.error("❌ Groq AI error:", aiErr.message);
           }
 
-          /* ----------------------------------------
-           * F) Mark Message as Handled
-           * ---------------------------------------- */
-          await supabase.from("messages_handled").insert({
-            message_id: messageId,
-            user_id: integ.user_id,
-          });
+          if (platform === "whatsapp") {
+            await sendWhatsappMessage(
+              integration.whatsapp_number,
+              integration.whatsapp_token,
+              senderId,
+              replyText
+            );
+          }
+
+          if (platform === "facebook") {
+            await sendFacebookMessage(
+              integration.fb_page_id,
+              integration.fb_page_token,
+              senderId,
+              replyText
+            );
+          }
+
+          if (platform === "instagram") {
+            await sendInstagramMessage(
+              integration.instagram_page_id,
+              integration.instagram_access_token,
+              senderId,
+              replyText
+            );
+          }
         }
+
+        // ✅ ALWAYS mark message handled
+        await supabase.from("messages_handled").insert({
+          message_id: messageId,
+          user_id: integration.user_id,
+        });
       }
     }
   } catch (err) {

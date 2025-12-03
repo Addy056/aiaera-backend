@@ -1,27 +1,40 @@
-// backend/routes/meta/whatsapp.js
 import express from "express";
-import { handleWhatsappWebhook } from "../../controllers/whatsappController.js";
+import {
+  handleWhatsappVerification,
+  handleWhatsappMessage,
+} from "../../controllers/whatsappController.js";
 
 const router = express.Router();
 
 /**
- * WhatsApp Webhook:
- * - GET → Only verification challenge
- * - POST → Incoming WhatsApp messages
+ * ✅ WhatsApp Webhook Routes
+ * GET  → Verification Challenge
+ * POST → Incoming WhatsApp messages
  */
 
-// GET: Verification Challenge
+// -----------------------------
+// ✅ WEBHOOK VERIFICATION
+// -----------------------------
 router.get("/", (req, res) => {
-  return handleWhatsappWebhook(req, res); 
+  try {
+    return handleWhatsappVerification(req, res);
+  } catch (err) {
+    console.error("❌ WhatsApp webhook verification error:", err);
+    return res.sendStatus(500);
+  }
 });
 
-// POST: Incoming WhatsApp messages
+// -----------------------------
+// ✅ INCOMING MESSAGES
+// -----------------------------
 router.post("/", async (req, res) => {
   try {
-    await handleWhatsappWebhook(req, res);
+    // ⚠️ Meta requires an immediate 200 OK or it retries
+    res.sendStatus(200);
+
+    await handleWhatsappMessage(req.body);
   } catch (err) {
-    console.error("❌ WhatsApp route POST error:", err);
-    return res.sendStatus(500);
+    console.error("❌ WhatsApp webhook POST error:", err);
   }
 });
 

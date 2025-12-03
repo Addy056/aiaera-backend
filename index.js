@@ -1,4 +1,3 @@
-// backend/index.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -22,10 +21,8 @@ import chatbotRouter from "./routes/chatbot.js";
 import chatbotPreviewStream from "./routes/chatbotPreviewStream.js";
 import cleanupContextRouter from "./routes/cleanupContext.js";
 
-// External Webhooks
-import whatsappWebhookRouter from "./routes/webhooks/whatsapp.js";
-import facebookWebhookRouter from "./routes/webhooks/facebook.js";
-import instagramWebhookRouter from "./routes/webhooks/instagram.js";
+// ✅ Unified Meta Webhook (WhatsApp + Facebook + Instagram)
+import metaWebhookRouter from "./routes/metawebhook.js";
 
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -33,7 +30,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ----------------------
-// Reverse proxy (Render)
+// Reverse proxy (Render / Vercel safe)
 // ----------------------
 app.set("trust proxy", 1);
 
@@ -52,27 +49,51 @@ app.use(
 // ✅ STREAM-SAFE COMPRESSION
 // ----------------------
 app.use((req, res, next) => {
-  if (req.path.includes("/preview-stream")) {
-    return next(); // DO NOT compress SSE
-  }
+  if (req.path.includes("/preview-stream")) return next();
   return compression()(req, res, next);
 });
 
 // ----------------------
-// CORS
+// ✅ PRODUCTION-SAFE CORS
 // ----------------------
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : ["*"];
+
 app.use(
   cors({
-    origin: "*",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 // ----------------------
-// Razorpay webhook raw body
+// ✅ Razorpay webhook raw body (SIZE LIMITED)
 // ----------------------
-app.use("/api/payment-webhook", express.raw({ type: "*/*" }));
+app.use(
+  "/api/payment-webhook",
+  express.raw({
+    type: "*/*",
+    limit: "2mb",
+  })
+);
+
+// ----------------------
+// ✅ Unified Meta webhook raw guard (SIZE LIMITED)
+// ----------------------
+app.use(
+  "/api/webhook",
+  express.json({
+    limit: "2mb",
+  })
+);
 
 // ----------------------
 // JSON parser
@@ -95,6 +116,7 @@ app.get("/", (req, res) => {
     status: "✅ AIAERA backend is running!",
     version: "1.0.0",
     environment: process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -125,11 +147,12 @@ app.use("/api/chatbot", chatbotPreviewStream);
 app.use("/api/chatbot", chatbotRouter);
 
 // ----------------------
-// Meta Webhooks
+// ✅ UNIFIED META WEBHOOK (WA + FB + IG)
+// FINAL URLS:
+// GET  /api/webhook/meta
+// POST /api/webhook/meta
 // ----------------------
-app.use("/api/webhooks/whatsapp", whatsappWebhookRouter);
-app.use("/api/webhooks/facebook", facebookWebhookRouter);
-app.use("/api/webhooks/instagram", instagramWebhookRouter);
+app.use("/api/webhook", metaWebhookRouter);
 
 // ----------------------
 // 404 Handler
@@ -148,10 +171,25 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ----------------------
-// Start Server
+// ✅ GRACEFUL SHUTDOWN (VERY IMPORTANT FOR WEBHOOKS)
 // ----------------------
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 AIAERA backend running on port ${PORT}`);
+});
+
+process.on("SIGTERM", () => {
+  console.log("🛑 SIGTERM received. Shutting down gracefully...");
+  server.close(() => {
+    console.log("✅ Server closed safely.");
+    process.exit(0);
+  });
+});
+
+process.on("SIGINT", () => {
+  console.log("🛑 SIGINT received. Shutting down...");
+  server.close(() => {
+    process.exit(0);
+  });
 });
 
 export default app;

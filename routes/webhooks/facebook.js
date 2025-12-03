@@ -1,27 +1,37 @@
-// backend/routes/meta/facebook.js
 import express from "express";
-import { handleFacebookWebhook } from "../../controllers/facebookController.js";
+import { handleFacebookVerification, handleFacebookMessage } from "../../controllers/facebookController.js";
 
 const router = express.Router();
 
 /**
- * Facebook Webhook:
- * - GET → Verify Token
- * - POST → Handle messages
+ * ✅ Facebook Webhook Routes
+ * GET  → Verification
+ * POST → Incoming messages / events
  */
 
+// -----------------------------
+// ✅ WEBHOOK VERIFICATION
+// -----------------------------
 router.get("/", (req, res) => {
-  // Verification MUST be handled separately
-  return handleFacebookWebhook(req, res);
+  try {
+    return handleFacebookVerification(req, res);
+  } catch (err) {
+    console.error("❌ Facebook webhook verification error:", err);
+    return res.sendStatus(500);
+  }
 });
 
+// -----------------------------
+// ✅ INCOMING MESSAGES
+// -----------------------------
 router.post("/", async (req, res) => {
-  // Meta requires immediate response or it retries
   try {
-    await handleFacebookWebhook(req, res);
+    // ⚠️ Meta requires 200 OK immediately
+    res.sendStatus(200);
+
+    await handleFacebookMessage(req.body);
   } catch (err) {
-    console.error("❌ Facebook POST route error:", err);
-    return res.sendStatus(500);
+    console.error("❌ Facebook webhook POST error:", err);
   }
 });
 

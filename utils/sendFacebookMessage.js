@@ -1,22 +1,38 @@
-// utils/sendFacebookMessage.js
 import axios from "axios";
+import { metaConfig } from "./metaConfig.js";
 
 /**
- * Send a message using Facebook Page Inbox (Meta Graph API v21).
+ * Send a message using Facebook Page Inbox (Meta Graph API).
  *
  * @param {string} pageId - Facebook Page ID.
- * @param {string} token - Page Access Token (not user token).
+ * @param {string} pageToken - Page Access Token (stored per user).
  * @param {string} recipientId - PSID of the user.
  * @param {string} text - Message text.
+ * @returns {object} { success: boolean, messageId?: string, error?: any }
  */
-export async function sendFacebookMessage(pageId, token, recipientId, text) {
-  if (!pageId || !token || !recipientId || !text) {
-    console.error("❌ Missing required parameters in sendFacebookMessage");
-    return;
+export async function sendFacebookMessage(
+  pageId,
+  pageToken,
+  recipientId,
+  text
+) {
+  // ✅ Validation
+  if (!pageId || !pageToken || !recipientId || !text) {
+    console.error("❌ Missing required parameters in sendFacebookMessage:", {
+      pageId,
+      hasToken: !!pageToken,
+      recipientId,
+      textLength: text?.length,
+    });
+
+    return {
+      success: false,
+      error: "Missing required parameters",
+    };
   }
 
   try {
-    const url = `https://graph.facebook.com/v21.0/${pageId}/messages`;
+    const url = `${metaConfig.apiBaseUrl}/${pageId}/messages`;
 
     const payload = {
       recipient: { id: recipientId },
@@ -25,23 +41,47 @@ export async function sendFacebookMessage(pageId, token, recipientId, text) {
     };
 
     const headers = {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${pageToken}`,
       "Content-Type": "application/json",
     };
 
-    const response = await axios.post(url, payload, { headers });
+    const response = await axios.post(url, payload, {
+      headers,
+      timeout: 15000, // ✅ 15s production safety timeout
+    });
 
-    console.log(`✅ Facebook message sent to: ${recipientId}`, response.data);
-    return response.data;
+    // ✅ Support both possible Meta response formats
+    const messageId =
+      response.data?.message_id ||
+      response.data?.messages?.[0]?.id ||
+      null;
+
+    console.log(`✅ Facebook message sent to PSID: ${recipientId}`, {
+      messageId,
+    });
+
+    return {
+      success: true,
+      messageId,
+      raw: response.data,
+    };
   } catch (err) {
     const errorData = err.response?.data || err.message;
 
     console.error("❌ Error sending Facebook message:", errorData);
 
-    // Return error back to controller
+    // ✅ Meta common errors
+    if (errorData?.error?.code === 190) {
+      console.error("🔐 Facebook Page token expired or invalid.");
+    }
+
+    if (errorData?.error?.code === 613) {
+      console.error("⏳ Facebook API rate limit reached.");
+    }
+
     return {
-      error: true,
-      details: errorData,
+      success: false,
+      error: errorData,
     };
   }
 }
