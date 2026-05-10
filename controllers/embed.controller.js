@@ -4,19 +4,16 @@ import { supabase } from "../config/supabaseClient.js";
 ========================================
 EMBED SCRIPT
 ========================================
-Dynamic widget injection
-
-Usage:
-<script src="BACKEND_URL/api/embed/CHATBOT_ID.js"></script>
-========================================
 */
-
 export const getEmbedScript = async (
   req,
   res
 ) => {
+
   try {
-    const { id } = req.params;
+
+    const { id } =
+      req.params;
 
     /*
     ========================================
@@ -28,11 +25,15 @@ export const getEmbedScript = async (
       error,
     } = await supabase
       .from("chatbots")
-      .select("id,name")
+      .select("*")
       .eq("id", id)
       .single();
 
-    if (error || !chatbot) {
+    if (
+      error ||
+      !chatbot
+    ) {
+
       return res
         .status(404)
         .send(
@@ -40,8 +41,14 @@ export const getEmbedScript = async (
         );
     }
 
+    /*
+    ========================================
+    FRONTEND URL
+    ========================================
+    */
     const FRONTEND_URL =
-      process.env.FRONTEND_URL;
+      process.env.FRONTEND_URL ||
+      "http://localhost:5173";
 
     /*
     ========================================
@@ -51,67 +58,151 @@ export const getEmbedScript = async (
     const script = `
 (function () {
 
-  if (window.AIAERA_WIDGET_LOADED) {
+  /*
+  ========================================
+  PREVENT MULTIPLE LOADS
+  ========================================
+  */
+  if (
+    window.AIAERA_WIDGET_LOADED
+  ) {
     return;
   }
 
-  window.AIAERA_WIDGET_LOADED = true;
+  window.AIAERA_WIDGET_LOADED =
+    true;
 
-  var chatbotId = "${id}";
-  var baseUrl = "${FRONTEND_URL}";
+  /*
+  ========================================
+  VARIABLES
+  ========================================
+  */
+  var chatbotId =
+    "${id}";
+
+  var baseUrl =
+    "${FRONTEND_URL}";
 
   /*
   ========================================
   MOBILE CHECK
   ========================================
   */
-  var isMobile = window.innerWidth < 768;
+  var isMobile =
+    window.innerWidth < 768;
 
   /*
   ========================================
   BUTTON
   ========================================
   */
-  var button = document.createElement("button");
+  var button =
+    document.createElement(
+      "button"
+    );
 
-  button.innerHTML = "💬";
+  button.innerHTML =
+    "💬";
 
   button.setAttribute(
     "aria-label",
     "Open AI Chat"
   );
 
-  button.style.position = "fixed";
-  button.style.bottom = "20px";
-  button.style.right = "20px";
-  button.style.width = "64px";
-  button.style.height = "64px";
-  button.style.borderRadius = "50%";
-  button.style.border = "none";
-  button.style.background = "#7f5af0";
-  button.style.color = "#ffffff";
-  button.style.fontSize = "28px";
-  button.style.cursor = "pointer";
-  button.style.zIndex = "999999";
+  /*
+  ========================================
+  BUTTON STYLE
+  ========================================
+  */
+  button.style.position =
+    "fixed";
+
+  button.style.bottom =
+    isMobile
+      ? "16px"
+      : "24px";
+
+  button.style.right =
+    isMobile
+      ? "16px"
+      : "24px";
+
+  button.style.width =
+    isMobile
+      ? "62px"
+      : "68px";
+
+  button.style.height =
+    isMobile
+      ? "62px"
+      : "68px";
+
+  button.style.border =
+    "none";
+
+  button.style.outline =
+    "none";
+
+  button.style.cursor =
+    "pointer";
+
+  button.style.borderRadius =
+    "50%";
+
+  button.style.background =
+    "linear-gradient(135deg,#7f5af0,#4f46e5)";
+
+  button.style.color =
+    "#ffffff";
+
+  button.style.fontSize =
+    "28px";
+
+  button.style.display =
+    "flex";
+
+  button.style.alignItems =
+    "center";
+
+  button.style.justifyContent =
+    "center";
+
   button.style.boxShadow =
-    "0 12px 35px rgba(0,0,0,0.25)";
+    "0 20px 60px rgba(124,58,237,0.45)";
+
   button.style.transition =
-    "all 0.3s ease";
+    "all 0.25s ease";
+
+  button.style.zIndex =
+    "2147483647";
+
+  button.style.visibility =
+    "visible";
+
+  button.style.opacity =
+    "1";
+
+  button.style.pointerEvents =
+    "auto";
 
   /*
   ========================================
-  HOVER EFFECT
+  HOVER
   ========================================
   */
-  button.onmouseenter = function () {
-    button.style.transform =
-      "scale(1.08)";
-  };
+  button.onmouseenter =
+    function () {
 
-  button.onmouseleave = function () {
-    button.style.transform =
-      "scale(1)";
-  };
+      button.style.transform =
+        "scale(1.08)";
+    };
+
+  button.onmouseleave =
+    function () {
+
+      button.style.transform =
+        "scale(1)";
+    };
 
   /*
   ========================================
@@ -119,42 +210,73 @@ export const getEmbedScript = async (
   ========================================
   */
   var container =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
-  container.style.position = "fixed";
-  container.style.bottom = "95px";
-  container.style.right = "20px";
+  container.style.position =
+    "fixed";
+
+  container.style.bottom =
+    isMobile
+      ? "0"
+      : "110px";
+
+  container.style.right =
+    isMobile
+      ? "0"
+      : "40px";
 
   container.style.width =
     isMobile
-      ? "calc(100vw - 20px)"
-      : "380px";
+      ? "100vw"
+      : "350px";
 
   container.style.height =
     isMobile
-      ? "80vh"
-      : "650px";
+      ? "100vh"
+      : "600px";
 
-  container.style.maxHeight = "700px";
+  container.style.maxWidth =
+    "calc(100vw - 20px)";
 
-  container.style.background = "#ffffff";
+  container.style.maxHeight =
+    "calc(100vh - 140px)";
 
   container.style.borderRadius =
     isMobile
-      ? "20px 20px 0 0"
-      : "24px";
+      ? "0"
+      : "26px";
 
-  container.style.overflow = "hidden";
+  container.style.overflow =
+    "hidden";
 
-  container.style.display = "none";
+  container.style.background =
+    "#0B1120";
 
-  container.style.zIndex = "999999";
+  container.style.border =
+    "1px solid rgba(255,255,255,0.08)";
 
   container.style.boxShadow =
-    "0 25px 60px rgba(0,0,0,0.35)";
+    "0 25px 80px rgba(0,0,0,0.45)";
 
   container.style.backdropFilter =
-    "blur(12px)";
+    "blur(20px)";
+
+  container.style.zIndex =
+    "2147483647";
+
+  container.style.display =
+    "none";
+
+  container.style.opacity =
+    "0";
+
+  container.style.transform =
+    "translateY(20px) scale(0.96)";
+
+  container.style.transition =
+    "all 0.25s ease";
 
   /*
   ========================================
@@ -162,61 +284,179 @@ export const getEmbedScript = async (
   ========================================
   */
   var iframe =
-    document.createElement("iframe");
+    document.createElement(
+      "iframe"
+    );
 
   iframe.src =
     baseUrl +
     "/public-chatbot/" +
     chatbotId;
 
-  iframe.style.width = "100%";
-  iframe.style.height = "100%";
-  iframe.style.border = "none";
+  iframe.allow =
+    "microphone; clipboard-write";
 
-  iframe.setAttribute(
-    "allow",
-    "clipboard-write"
-  );
+  iframe.style.width =
+    "100%";
+
+  iframe.style.height =
+    "100%";
+
+  iframe.style.border =
+    "none";
+
+  iframe.style.display =
+    "block";
+
+  iframe.style.background =
+    "#0B1120";
+
+  iframe.style.visibility =
+    "visible";
+
+  iframe.style.opacity =
+    "1";
 
   /*
   ========================================
   APPEND IFRAME
   ========================================
   */
-  container.appendChild(iframe);
+  container.appendChild(
+    iframe
+  );
 
   /*
   ========================================
   TOGGLE
   ========================================
   */
-  var isOpen = false;
+  var isOpen =
+    false;
 
-  button.onclick = function () {
+  button.onclick =
+    function () {
 
-    isOpen = !isOpen;
+      isOpen =
+        !isOpen;
 
-    container.style.display =
-      isOpen
-        ? "block"
-        : "none";
-  };
+      if (isOpen) {
+
+        container.style.display =
+          "block";
+
+        requestAnimationFrame(
+          function () {
+
+            container.style.opacity =
+              "1";
+
+            container.style.transform =
+              "translateY(0) scale(1)";
+          }
+        );
+
+      } else {
+
+        container.style.opacity =
+          "0";
+
+        container.style.transform =
+          "translateY(20px) scale(0.96)";
+
+        setTimeout(
+          function () {
+
+            container.style.display =
+              "none";
+
+          },
+          250
+        );
+      }
+    };
 
   /*
   ========================================
-  ESC KEY CLOSE
+  ESC CLOSE
   ========================================
   */
   document.addEventListener(
     "keydown",
     function (e) {
 
-      if (e.key === "Escape") {
+      if (
+        e.key === "Escape" &&
+        isOpen
+      ) {
 
-        container.style.display =
-          "none";
+        container.style.opacity =
+          "0";
 
-        isOpen = false;
+        container.style.transform =
+          "translateY(20px) scale(0.96)";
+
+        setTimeout(
+          function () {
+
+            container.style.display =
+              "none";
+
+          },
+          250
+        );
+
+        isOpen =
+          false;
+      }
+    }
+  );
+
+  /*
+  ========================================
+  RESPONSIVE RESIZE
+  ========================================
+  */
+  window.addEventListener(
+    "resize",
+    function () {
+
+      var mobile =
+        window.innerWidth < 768;
+
+      if (mobile) {
+
+        container.style.width =
+          "100vw";
+
+        container.style.height =
+          "100vh";
+
+        container.style.bottom =
+          "0";
+
+        container.style.right =
+          "0";
+
+        container.style.borderRadius =
+          "0";
+
+      } else {
+
+        container.style.width =
+          "350px";
+
+        container.style.height =
+          "600px";
+
+        container.style.bottom =
+          "110px";
+
+        container.style.right =
+          "40px";
+
+        container.style.borderRadius =
+          "26px";
       }
     }
   );
@@ -226,9 +466,13 @@ export const getEmbedScript = async (
   APPEND TO BODY
   ========================================
   */
-  document.body.appendChild(button);
+  document.body.appendChild(
+    button
+  );
 
-  document.body.appendChild(container);
+  document.body.appendChild(
+    container
+  );
 
 })();
 `;
@@ -248,7 +492,14 @@ export const getEmbedScript = async (
       "public, max-age=3600"
     );
 
-    return res.send(script);
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      "*"
+    );
+
+    return res.send(
+      script
+    );
 
   } catch (err) {
 
@@ -260,7 +511,7 @@ export const getEmbedScript = async (
     return res
       .status(500)
       .send(
-        `console.error("AIAERA widget failed to load");`
+        'console.error("AIAERA widget failed to load");'
       );
   }
 };
@@ -269,17 +520,17 @@ export const getEmbedScript = async (
 ========================================
 PUBLIC CHATBOT DATA
 ========================================
-Used by:
-- Website Widget
-- Public Chatbot Page
-========================================
 */
-
 export const getPublicChatbot =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
+
     try {
 
-      const { id } = req.params;
+      const { id } =
+        req.params;
 
       const {
         data,
@@ -290,7 +541,11 @@ export const getPublicChatbot =
         .eq("id", id)
         .single();
 
-      if (error || !data) {
+      if (
+        error ||
+        !data
+      ) {
+
         return res.status(404).json({
           success: false,
           error:
@@ -298,22 +553,27 @@ export const getPublicChatbot =
         });
       }
 
-      /*
-      ========================================
-      SAFE PUBLIC RESPONSE
-      ========================================
-      */
       return res.json({
         success: true,
 
         chatbot: {
-          id: data.id,
-          name: data.name,
+          id:
+            data.id,
+
+          bot_name:
+            data.bot_name,
+
           business_info:
             data.business_info,
+
           website_url:
             data.website_url,
-          theme: data.theme,
+
+          logo_url:
+            data.logo_url || "",
+
+          theme:
+            data.theme || {},
         },
       });
 
