@@ -93,13 +93,34 @@ CORS CONFIG
 ========================================
 */
 const allowedOrigins = [
+
+  /*
+  ========================================
+  LOCAL
+  ========================================
+  */
   "http://localhost:5173",
 
   "http://localhost:3000",
 
+  /*
+  ========================================
+  PRODUCTION DOMAINS
+  ========================================
+  */
+  "https://aiaera.in",
+
+  "https://www.aiaera.in",
+
+  "https://aiaera-frontend.vercel.app",
+
+  /*
+  ========================================
+  ENV URL
+  ========================================
+  */
   process.env.FRONTEND_URL,
 
-  "https://your-frontend.vercel.app",
 ].filter(Boolean);
 
 app.use(
@@ -111,7 +132,7 @@ app.use(
 
       /*
       ========================================
-      ALLOW SERVER REQUESTS
+      SERVER / POSTMAN
       ========================================
       */
       if (!origin) {
@@ -145,7 +166,7 @@ app.use(
       ========================================
       */
       if (
-        origin.includes(
+        origin.endsWith(
           ".vercel.app"
         )
       ) {
@@ -157,13 +178,13 @@ app.use(
       }
 
       console.error(
-        "CORS BLOCKED:",
+        "❌ CORS BLOCKED:",
         origin
       );
 
       return callback(
         new Error(
-          "CORS policy blocked this origin"
+          `CORS blocked origin: ${origin}`
         ),
         false
       );
@@ -184,6 +205,16 @@ app.use(
       "Authorization",
     ],
   })
+);
+
+/*
+========================================
+PREFLIGHT REQUESTS
+========================================
+*/
+app.options(
+  "*",
+  cors()
 );
 
 /*
