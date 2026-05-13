@@ -5,141 +5,103 @@ import { supabase } from "../config/supabaseClient.js";
 GET PUBLIC CHATBOT
 ========================================
 */
-export const getPublicChatbot =
-  async (req, res) => {
+export const getPublicChatbot = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
 
-    try {
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: "Chatbot ID required",
+      });
+    }
 
-      const { id } =
-        req.params;
-
-      if (!id) {
-
-        return res.status(400).json({
-          success: false,
-          error:
-            "Chatbot ID required",
-        });
-      }
-
-      const {
-        data,
-        error,
-      } = await supabase
+    const { data, error } =
+      await supabase
         .from("chatbots")
         .select("*")
         .eq("id", id)
         .single();
 
-      if (
-        error ||
-        !data
-      ) {
-
-        console.error(
-          "CHATBOT FETCH ERROR:",
-          error
-        );
-
-        return res.status(404).json({
-          success: false,
-          error:
-            "Chatbot not found",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-
-        chatbot: {
-          id:
-            data.id,
-
-          name:
-            data.name,
-
-          bot_name:
-            data.bot_name,
-
-          business_info:
-            data.business_info,
-
-          website_url:
-            data.website_url,
-
-          theme:
-            data.theme || {},
-
-          user_id:
-            data.user_id,
-        },
-      });
-
-    } catch (err) {
-
+    if (error || !data) {
       console.error(
-        "PUBLIC CHATBOT ERROR:",
-        err
+        "CHATBOT FETCH ERROR:",
+        error
       );
 
-      return res.status(500).json({
+      return res.status(404).json({
         success: false,
-        error:
-          "Failed to load chatbot",
+        error: "Chatbot not found",
       });
     }
-  };
+
+    return res.status(200).json({
+      success: true,
+
+      chatbot: {
+        id: data.id,
+        name: data.name,
+        bot_name: data.bot_name,
+        business_info:
+          data.business_info,
+        website_url:
+          data.website_url,
+        theme: data.theme || {},
+        user_id: data.user_id,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "PUBLIC CHATBOT ERROR:",
+      err
+    );
+
+    return res.status(500).json({
+      success: false,
+      error: "Failed to load chatbot",
+    });
+  }
+};
 
 /*
 ========================================
 GET EMBED SCRIPT
 ========================================
 */
-export const getEmbedScript =
-  async (req, res) => {
+export const getEmbedScript = async (
+  req,
+  res
+) => {
+  try {
+    const { id } = req.params;
 
-    try {
+    if (!id) {
+      return res
+        .status(400)
+        .send("Chatbot ID required");
+    }
 
-      const { id } =
-        req.params;
+    /*
+    ========================================
+    URLS
+    ========================================
+    */
+    const frontendUrl =
+      process.env.FRONTEND_URL;
 
-      if (!id) {
+    const backendUrl =
+      process.env.BACKEND_URL;
 
-        return res.status(400).send(
-          "Chatbot ID required"
-        );
-      }
-
-      /*
-      ========================================
-      URLS
-      ========================================
-      */
-      const frontendUrl =
-        process.env.FRONTEND_URL;
-
-      const backendUrl =
-        process.env.BACKEND_URL;
-
-      /*
-      ========================================
-      EMBED SCRIPT
-      ========================================
-      */
-      const script = `
+    /*
+    ========================================
+    EMBED SCRIPT
+    ========================================
+    */
+    const script = `
 (function () {
-
-  /*
-  ========================================
-  STOP INSIDE IFRAME
-  ========================================
-  */
-  if (
-    window.self !==
-    window.top
-  ) {
-    return;
-  }
 
   /*
   ========================================
@@ -148,11 +110,18 @@ export const getEmbedScript =
   */
   if (
     document.getElementById(
-      "aiaera-chatbot-widget"
+      "aiaera-chatbot-button"
     )
   ) {
     return;
   }
+
+  /*
+  ========================================
+  CHAT STATE
+  ========================================
+  */
+  let isOpen = false;
 
   /*
   ========================================
@@ -180,37 +149,20 @@ export const getEmbedScript =
     iframe.style,
     {
       position: "fixed",
-
-      bottom: "82px",
-
+      bottom: "90px",
       right: "20px",
-
-      width: "400px",
-
-      height: "540px",
-
+      width: "380px",
+      height: "650px",
+      maxWidth: "95vw",
+      maxHeight: "85vh",
       border: "none",
-
       borderRadius: "24px",
-
       overflow: "hidden",
-
-      background: "#0B1120",
-
+      background: "#ffffff",
       zIndex: "999999",
-
-      opacity: "0",
-
-      pointerEvents: "none",
-
-      transform:
-        "translateY(20px) scale(0.95)",
-
-      transition:
-        "all 0.25s ease",
-
+      display: "none",
       boxShadow:
-        "0 20px 60px rgba(0,0,0,0.35)",
+        "0 20px 60px rgba(0,0,0,0.25)",
     }
   );
 
@@ -219,22 +171,52 @@ export const getEmbedScript =
   MOBILE RESPONSIVE
   ========================================
   */
-  if (
-    window.innerWidth < 480
-  ) {
+  function handleMobileView() {
 
-    iframe.style.width =
-      "92vw";
+    if (
+      window.innerWidth <= 768
+    ) {
 
-    iframe.style.height =
-      "68vh";
+      iframe.style.width =
+        "100vw";
 
-    iframe.style.right =
-      "4vw";
+      iframe.style.height =
+        "100vh";
 
-    iframe.style.bottom =
-      "80px";
+      iframe.style.right =
+        "0px";
+
+      iframe.style.bottom =
+        "0px";
+
+      iframe.style.borderRadius =
+        "0px";
+
+    } else {
+
+      iframe.style.width =
+        "380px";
+
+      iframe.style.height =
+        "650px";
+
+      iframe.style.right =
+        "20px";
+
+      iframe.style.bottom =
+        "90px";
+
+      iframe.style.borderRadius =
+        "24px";
+    }
   }
+
+  handleMobileView();
+
+  window.addEventListener(
+    "resize",
+    handleMobileView
+  );
 
   /*
   ========================================
@@ -258,45 +240,31 @@ export const getEmbedScript =
     button.style,
     {
       position: "fixed",
-
       bottom: "20px",
-
       right: "20px",
-
-      width: "62px",
-
-      height: "62px",
-
+      width: "64px",
+      height: "64px",
       borderRadius: "50%",
-
       border: "none",
-
       cursor: "pointer",
-
       overflow: "hidden",
-
       background:
         "linear-gradient(135deg,#7f5af0,#5b8cff)",
-
       display: "flex",
-
       alignItems: "center",
-
       justifyContent: "center",
-
       boxShadow:
-        "0 12px 35px rgba(127,90,240,0.45)",
-
+        "0 10px 35px rgba(127,90,240,0.45)",
       zIndex: "999999",
-
       transition:
-        "all 0.25s ease",
+        "transform 0.2s ease",
+      padding: "0px",
     }
   );
 
   /*
   ========================================
-  DEFAULT ICON
+  DEFAULT CHAT ICON
   ========================================
   */
   button.innerHTML =
@@ -308,8 +276,8 @@ export const getEmbedScript =
           display:flex;
           align-items:center;
           justify-content:center;
-          color:white;
           font-size:28px;
+          color:white;
         "
       >
         💬
@@ -318,15 +286,13 @@ export const getEmbedScript =
 
   /*
   ========================================
-  LOAD BUSINESS LOGO
+  LOAD LOGO
   ========================================
   */
   fetch(
     "${backendUrl}/api/embed/chatbot/${id}"
   )
-    .then((res) =>
-      res.json()
-    )
+    .then((res) => res.json())
     .then((data) => {
 
       const logo =
@@ -338,7 +304,7 @@ export const getEmbedScript =
           \`
             <img
               src="\${logo}"
-              alt="logo"
+              alt="Business Logo"
               style="
                 width:100%;
                 height:100%;
@@ -349,67 +315,57 @@ export const getEmbedScript =
           \`;
       }
     })
-    .catch(() => {
-
+    .catch((err) => {
       console.log(
-        "Logo load failed"
+        "Logo load failed",
+        err
       );
     });
 
   /*
   ========================================
-  HOVER EFFECT
+  BUTTON HOVER
   ========================================
   */
-  button.onmouseenter =
-    function () {
-
+  button.addEventListener(
+    "mouseenter",
+    () => {
       button.style.transform =
         "scale(1.08)";
-    };
+    }
+  );
 
-  button.onmouseleave =
-    function () {
-
+  button.addEventListener(
+    "mouseleave",
+    () => {
       button.style.transform =
         "scale(1)";
-    };
+    }
+  );
 
   /*
   ========================================
-  TOGGLE CHAT
+  TOGGLE CHATBOT
   ========================================
   */
-  let open = false;
+  button.addEventListener(
+    "click",
+    () => {
 
-  button.onclick =
-    function () {
+      isOpen = !isOpen;
 
-      open = !open;
+      if (isOpen) {
 
-      if (open) {
-
-        iframe.style.opacity =
-          "1";
-
-        iframe.style.pointerEvents =
-          "auto";
-
-        iframe.style.transform =
-          "translateY(0px) scale(1)";
+        iframe.style.display =
+          "block";
 
       } else {
 
-        iframe.style.opacity =
-          "0";
-
-        iframe.style.pointerEvents =
+        iframe.style.display =
           "none";
-
-        iframe.style.transform =
-          "translateY(20px) scale(0.95)";
       }
-    };
+    }
+  );
 
   /*
   ========================================
@@ -427,32 +383,30 @@ export const getEmbedScript =
 })();
 `;
 
-      /*
-      ========================================
-      HEADERS
-      ========================================
-      */
-      res.setHeader(
-        "Content-Type",
-        "application/javascript"
-      );
+    /*
+    ========================================
+    HEADERS
+    ========================================
+    */
+    res.setHeader(
+      "Content-Type",
+      "application/javascript"
+    );
 
-      res.setHeader(
-        "Cache-Control",
-        "public, max-age=3600"
-      );
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=3600"
+    );
 
-      res.send(script);
+    return res.send(script);
+  } catch (err) {
+    console.error(
+      "EMBED SCRIPT ERROR:",
+      err
+    );
 
-    } catch (err) {
-
-      console.error(
-        "EMBED SCRIPT ERROR:",
-        err
-      );
-
-      res.status(500).send(
-        "Embed script failed"
-      );
-    }
-  };
+    return res
+      .status(500)
+      .send("Embed script failed");
+  }
+};
