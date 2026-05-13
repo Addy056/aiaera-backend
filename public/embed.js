@@ -102,29 +102,37 @@
     {
       position: "fixed",
 
-      bottom: "84px",
+      bottom: "88px",
 
       right: "20px",
 
-      width: "380px",
+      /*
+      ========================================
+      FINAL FIXED DIMENSIONS
+      ========================================
+      */
+      width: "420px",
 
-      height: "620px",
+      height: "520px",
 
       border: "none",
 
-      borderRadius: "26px",
+      borderRadius: "28px",
 
       overflow: "hidden",
 
-      background: "#0B1120",
+      background:
+        "#0B1120",
 
       zIndex: "999999",
 
       opacity: "0",
 
-      visibility: "hidden",
+      visibility:
+        "hidden",
 
-      pointerEvents: "none",
+      pointerEvents:
+        "none",
 
       transform:
         "translateY(20px) scale(0.96)",
@@ -147,16 +155,16 @@
   ) {
 
     iframe.style.width =
-      "94vw";
+      "95vw";
 
     iframe.style.height =
-      "78vh";
+      "66vh";
 
     iframe.style.right =
-      "3vw";
+      "2.5vw";
 
     iframe.style.bottom =
-      "78px";
+      "82px";
 
     iframe.style.borderRadius =
       "24px";
@@ -189,11 +197,12 @@
 
       right: "18px",
 
-      width: "60px",
+      width: "62px",
 
-      height: "60px",
+      height: "62px",
 
-      borderRadius: "50%",
+      borderRadius:
+        "50%",
 
       border: "none",
 
@@ -206,9 +215,11 @@
 
       display: "flex",
 
-      alignItems: "center",
+      alignItems:
+        "center",
 
-      justifyContent: "center",
+      justifyContent:
+        "center",
 
       boxShadow:
         "0 12px 35px rgba(127,90,240,0.45)",
@@ -230,7 +241,7 @@
       <div
         style="
           color:white;
-          font-size:26px;
+          font-size:28px;
           display:flex;
           align-items:center;
           justify-content:center;
@@ -248,37 +259,80 @@
   ========================================
   */
   fetch(
-    `${API_URL}/api/embed/chatbot/${chatbotId}`
-  )
-    .then((res) =>
-      res.json()
-    )
+  `${API_URL}/api/embed/chatbot/${chatbotId}`
+)
+    .then(async (res) => {
+
+      if (!res.ok) {
+
+        throw new Error(
+          "Failed to load chatbot"
+        );
+      }
+
+      return res.json();
+    })
     .then((data) => {
 
-      const logo =
-        data?.chatbot?.theme?.logo;
-
-      if (logo) {
-
-        button.innerHTML =
-          `
-            <img
-              src="${logo}"
-              alt="logo"
-              style="
-                width:100%;
-                height:100%;
-                object-fit:cover;
-                border-radius:50%;
-              "
-            />
-          `;
-      }
-    })
-    .catch(() => {
-
       console.log(
-        "Logo load failed"
+        "CHATBOT DATA:",
+        data
+      );
+
+      const logo =
+        data?.chatbot?.theme
+          ?.logo;
+
+      /*
+      ========================================
+      APPLY LOGO
+      ========================================
+      */
+      if (
+        logo &&
+        typeof logo ===
+          "string"
+      ) {
+
+        const img =
+          new Image();
+
+        img.onload =
+          function () {
+
+            button.innerHTML =
+              `
+                <img
+                  src="${logo}"
+                  alt="logo"
+                  style="
+                    width:100%;
+                    height:100%;
+                    object-fit:cover;
+                    border-radius:50%;
+                  "
+                />
+              `;
+          };
+
+        img.onerror =
+          function () {
+
+            console.error(
+              "Logo image failed to load:",
+              logo
+            );
+          };
+
+        img.src = logo;
+      }
+
+    })
+    .catch((err) => {
+
+      console.error(
+        "Logo load failed:",
+        err
       );
     });
 
