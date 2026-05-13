@@ -2,95 +2,112 @@ import axios from "axios";
 import { supabase } from "../config/supabaseClient.js";
 import { chatWithBot } from "./chatbot.controller.js";
 
-// =============================
-// SAVE INTEGRATION
-// =============================
-export const saveIntegration = async (req, res) => {
+/*
+========================================
+SAVE INTEGRATION
+========================================
+*/
+export const saveIntegration =
+  async (req, res) => {
 
-  try {
+    try {
 
-    const user_id = req.user.id;
+      const user_id =
+        req.user.id;
 
-    const {
-      whatsapp_token,
-      whatsapp_phone_id,
-      facebook,
-      calendly,
-      maps
-    } = req.body;
+      const {
+        whatsapp_token,
+        whatsapp_phone_id,
+        facebook,
+        calendly,
+        maps,
+      } = req.body;
 
-    const { data, error } = await supabase
-      .from("user_integrations")
-      .upsert(
-        [
+      const {
+        data,
+        error,
+      } = await supabase
+        .from(
+          "user_integrations"
+        )
+        .upsert(
+          [
+            {
+              user_id,
+
+              whatsapp_token:
+                whatsapp_token || "",
+
+              whatsapp_phone_id:
+                whatsapp_phone_id || "",
+
+              facebook:
+                facebook || "",
+
+              calendly:
+                calendly || "",
+
+              maps:
+                maps || "",
+            },
+          ],
           {
-            user_id,
-
-            whatsapp_token:
-              whatsapp_token || "",
-
-            whatsapp_phone_id:
-              whatsapp_phone_id || "",
-
-            facebook:
-              facebook || "",
-
-            calendly:
-              calendly || "",
-
-            maps:
-              maps || ""
+            onConflict:
+              "user_id",
           }
-        ],
-        {
-          onConflict: "user_id"
-        }
-      )
-      .select()
-      .single();
+        )
+        .select()
+        .single();
 
-    if (error) {
+      if (error) {
 
-      console.error(
-        "SAVE INTEGRATION ERROR:",
-        error
+        console.error(
+          "SAVE INTEGRATION ERROR:",
+          error
+        );
+
+        return res
+          .status(400)
+          .json({
+            error,
+          });
+      }
+
+      return res.json(
+        data
       );
 
-      return res
-        .status(400)
-        .json({
-          error
-        });
+    } catch (err) {
+
+      console.error(
+        "CONTROLLER ERROR:",
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          "Internal server error",
+      });
     }
+  };
 
-    res.json(data);
+/*
+========================================
+GET INTEGRATION
+========================================
+*/
+export const getIntegration =
+  async (req, res) => {
 
-  } catch (err) {
+    try {
 
-    console.error(
-      "CONTROLLER ERROR:",
-      err
-    );
+      const user_id =
+        req.user.id;
 
-    res.status(500).json({
-      error:
-        "Internal server error"
-    });
-  }
-};
-
-// =============================
-// GET INTEGRATION
-// =============================
-export const getIntegration = async (req, res) => {
-
-  try {
-
-    const user_id =
-      req.user.id;
-
-    const { data, error } =
-      await supabase
+      const {
+        data,
+        error,
+      } = await supabase
         .from(
           "user_integrations"
         )
@@ -101,88 +118,236 @@ export const getIntegration = async (req, res) => {
         )
         .single();
 
-    if (error) {
+      if (error) {
 
-      console.error(
-        "GET INTEGRATION ERROR:",
-        error
+        console.error(
+          "GET INTEGRATION ERROR:",
+          error
+        );
+
+        return res.json(
+          {}
+        );
+      }
+
+      return res.json(
+        data
       );
 
-      return res.json({});
+    } catch (err) {
+
+      console.error(
+        "GET CONTROLLER ERROR:",
+        err
+      );
+
+      return res.status(500).json({
+        error:
+          "Internal server error",
+      });
     }
+  };
 
-    res.json(data);
-
-  } catch (err) {
-
-    console.error(
-      "GET CONTROLLER ERROR:",
-      err
-    );
-
-    res.status(500).json({
-      error:
-        "Internal server error"
-    });
-  }
-};
-
-// =============================
-// VERIFY WEBHOOK
-// =============================
-export const verifyWhatsApp = (
-  req,
-  res
-) => {
-
-  const VERIFY_TOKEN =
-    process.env
-      .WHATSAPP_VERIFY_TOKEN;
-
-  const mode =
-    req.query[
-      "hub.mode"
-    ];
-
-  const token =
-    req.query[
-      "hub.verify_token"
-    ];
-
-  const challenge =
-    req.query[
-      "hub.challenge"
-    ];
-
-  if (
-    mode === "subscribe" &&
-    token === VERIFY_TOKEN
-  ) {
-
-    return res
-      .status(200)
-      .send(challenge);
-
-  } else {
-
-    return res.sendStatus(
-      403
-    );
-  }
-};
-
-// =============================
-// HANDLE INCOMING MESSAGES
-// =============================
-export const handleWhatsAppWebhook =
+/*
+========================================
+GET PUBLIC INTEGRATIONS
+USED BY EMBED CHATBOT
+========================================
+*/
+export const getPublicIntegrations =
   async (req, res) => {
+
+    try {
+
+      const {
+        chatbotId,
+      } = req.params;
+
+      if (!chatbotId) {
+
+        return res.status(400).json({
+          success: false,
+
+          error:
+            "Chatbot ID required",
+        });
+      }
+
+      /*
+      ========================================
+      GET CHATBOT
+      ========================================
+      */
+      const {
+        data: chatbot,
+        error: chatbotError,
+      } = await supabase
+        .from("chatbots")
+        .select(
+          "user_id"
+        )
+        .eq(
+          "id",
+          chatbotId
+        )
+        .single();
+
+      if (
+        chatbotError ||
+        !chatbot
+      ) {
+
+        console.error(
+          "CHATBOT ERROR:",
+          chatbotError
+        );
+
+        return res.status(404).json({
+          success: false,
+
+          error:
+            "Chatbot not found",
+        });
+      }
+
+      /*
+      ========================================
+      GET USER INTEGRATIONS
+      ========================================
+      */
+      const {
+        data:
+          integrations,
+        error:
+          integrationsError,
+      } = await supabase
+        .from(
+          "user_integrations"
+        )
+        .select(
+          "calendly, maps"
+        )
+        .eq(
+          "user_id",
+          chatbot.user_id
+        )
+        .single();
+
+      if (
+        integrationsError ||
+        !integrations
+      ) {
+
+        return res.status(200).json({
+          success: true,
+
+          integrations: {
+            calendly: "",
+            maps: "",
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        integrations: {
+          calendly:
+            integrations.calendly ||
+            "",
+
+          maps:
+            integrations.maps ||
+            "",
+        },
+      });
+
+    } catch (err) {
+
+      console.error(
+        "PUBLIC INTEGRATIONS ERROR:",
+        err
+      );
+
+      return res.status(500).json({
+        success: false,
+
+        error:
+          "Failed to load integrations",
+      });
+    }
+  };
+
+/*
+========================================
+VERIFY WHATSAPP WEBHOOK
+========================================
+*/
+export const verifyWhatsApp =
+  (
+    req,
+    res
+  ) => {
+
+    const VERIFY_TOKEN =
+      process.env
+        .WHATSAPP_VERIFY_TOKEN;
+
+    const mode =
+      req.query[
+        "hub.mode"
+      ];
+
+    const token =
+      req.query[
+        "hub.verify_token"
+      ];
+
+    const challenge =
+      req.query[
+        "hub.challenge"
+      ];
+
+    if (
+      mode ===
+        "subscribe" &&
+      token ===
+        VERIFY_TOKEN
+    ) {
+
+      return res
+        .status(200)
+        .send(
+          challenge
+        );
+
+    } else {
+
+      return res.sendStatus(
+        403
+      );
+    }
+  };
+
+/*
+========================================
+HANDLE WHATSAPP WEBHOOK
+========================================
+*/
+export const handleWhatsAppWebhook =
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const body =
         req.body;
 
-      if (body.object) {
+      if (
+        body.object
+      ) {
 
         const msg =
           body.entry?.[0]
@@ -208,9 +373,11 @@ export const handleWhatsAppWebhook =
           text
         );
 
-        // =============================
-        // FIND USER BY PHONE ID
-        // =============================
+        /*
+        ========================================
+        FIND USER BY PHONE ID
+        ========================================
+        */
         const phone_id =
           body.entry?.[0]
             ?.changes?.[0]
@@ -219,7 +386,8 @@ export const handleWhatsAppWebhook =
             ?.phone_number_id;
 
         const {
-          data: integration
+          data:
+            integration,
         } = await supabase
           .from(
             "user_integrations"
@@ -231,20 +399,26 @@ export const handleWhatsAppWebhook =
           )
           .single();
 
-        if (!integration) {
+        if (
+          !integration
+        ) {
 
           return res.sendStatus(
             200
           );
         }
 
-        // =============================
-        // GET CHATBOT
-        // =============================
+        /*
+        ========================================
+        GET CHATBOT
+        ========================================
+        */
         const {
-          data: chatbot
+          data: chatbot,
         } = await supabase
-          .from("chatbots")
+          .from(
+            "chatbots"
+          )
           .select("*")
           .eq(
             "user_id",
@@ -253,16 +427,20 @@ export const handleWhatsAppWebhook =
           .limit(1)
           .single();
 
-        if (!chatbot) {
+        if (
+          !chatbot
+        ) {
 
           return res.sendStatus(
             200
           );
         }
 
-        // =============================
-        // CHATBOT RESPONSE
-        // =============================
+        /*
+        ========================================
+        GENERATE AI REPLY
+        ========================================
+        */
         const session_id =
           from;
 
@@ -274,18 +452,21 @@ export const handleWhatsAppWebhook =
             chatbot_id:
               chatbot.id,
 
-            session_id
-          }
+            session_id,
+          },
         };
 
         let replyText =
           "Sorry, something went wrong.";
 
         const fakeRes = {
-          json: (data) => {
+          json: (
+            data
+          ) => {
+
             replyText =
               data.reply;
-          }
+          },
         };
 
         await chatWithBot(
@@ -293,9 +474,11 @@ export const handleWhatsAppWebhook =
           fakeRes
         );
 
-        // =============================
-        // SEND MESSAGE USING USER TOKEN
-        // =============================
+        /*
+        ========================================
+        SEND WHATSAPP MESSAGE
+        ========================================
+        */
         await axios.post(
           `https://graph.facebook.com/v19.0/${integration.whatsapp_phone_id}/messages`,
           {
@@ -306,8 +489,8 @@ export const handleWhatsAppWebhook =
 
             text: {
               body:
-                replyText
-            }
+                replyText,
+            },
           },
           {
             headers: {
@@ -315,8 +498,8 @@ export const handleWhatsAppWebhook =
                 `Bearer ${integration.whatsapp_token}`,
 
               "Content-Type":
-                "application/json"
-            }
+                "application/json",
+            },
           }
         );
 
@@ -325,16 +508,21 @@ export const handleWhatsAppWebhook =
         );
       }
 
-      res.sendStatus(404);
+      return res.sendStatus(
+        404
+      );
 
     } catch (err) {
 
       console.error(
         "Webhook Error:",
-        err.response?.data ||
-        err.message
+        err.response
+          ?.data ||
+          err.message
       );
 
-      res.sendStatus(500);
+      return res.sendStatus(
+        500
+      );
     }
   };

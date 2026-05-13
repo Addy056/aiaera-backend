@@ -94,6 +94,9 @@
   iframe.allow =
     "microphone; clipboard-write";
 
+  iframe.scrolling =
+    "no";
+
   Object.assign(
     iframe.style,
     {
@@ -103,13 +106,13 @@
 
       right: "20px",
 
-      width: "320px",
+      width: "380px",
 
-      height: "480px",
+      height: "620px",
 
       border: "none",
 
-      borderRadius: "22px",
+      borderRadius: "26px",
 
       overflow: "hidden",
 
@@ -124,13 +127,13 @@
       pointerEvents: "none",
 
       transform:
-        "translateY(20px) scale(0.95)",
+        "translateY(20px) scale(0.96)",
 
       transition:
         "all 0.22s ease",
 
       boxShadow:
-        "0 20px 60px rgba(0,0,0,0.35)",
+        "0 25px 80px rgba(0,0,0,0.45)",
     }
   );
 
@@ -147,13 +150,16 @@
       "94vw";
 
     iframe.style.height =
-      "72vh";
+      "78vh";
 
     iframe.style.right =
       "3vw";
 
     iframe.style.bottom =
       "78px";
+
+    iframe.style.borderRadius =
+      "24px";
   }
 
   /*
@@ -183,9 +189,9 @@
 
       right: "18px",
 
-      width: "58px",
+      width: "60px",
 
-      height: "58px",
+      height: "60px",
 
       borderRadius: "50%",
 
@@ -216,7 +222,7 @@
 
   /*
   ========================================
-  DEFAULT BUTTON ICON
+  DEFAULT BUTTON
   ========================================
   */
   button.innerHTML =
@@ -330,7 +336,7 @@
           "none";
 
         iframe.style.transform =
-          "translateY(20px) scale(0.95)";
+          "translateY(20px) scale(0.96)";
 
         setTimeout(() => {
 
