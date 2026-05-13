@@ -185,9 +185,9 @@ export const getEmbedScript =
 
       right: "20px",
 
-      width: "340px",
+      width: "400px",
 
-      height: "520px",
+      height: "540px",
 
       border: "none",
 
@@ -227,7 +227,7 @@ export const getEmbedScript =
       "92vw";
 
     iframe.style.height =
-      "75vh";
+      "68vh";
 
     iframe.style.right =
       "4vw";

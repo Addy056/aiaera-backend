@@ -67,10 +67,10 @@
   ========================================
   */
   const FRONTEND_URL =
-    "https://your-frontend.vercel.app";
+   "https://aiaera-frontend.vercel.app";
 
   const API_URL =
-    "https://your-backend.onrender.com";
+      "https://aiaera-backend.onrender.com";
 
   /*
   ========================================
