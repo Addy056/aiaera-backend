@@ -5,7 +5,27 @@ import {
   getPublicChatbot,
 } from "../controllers/embed.controller.js";
 
-const router = express.Router();
+const router =
+  express.Router();
+
+/*
+========================================
+HEALTH CHECK
+========================================
+Used for testing routes
+========================================
+*/
+router.get(
+  "/health",
+  (req, res) => {
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Embed routes working",
+    });
+  }
+);
 
 /*
 ========================================
@@ -15,6 +35,9 @@ Used by:
 - Website Widget
 - Public Chatbot Page
 - External Integrations
+
+Example:
+GET /api/embed/chatbot/:id
 ========================================
 */
 router.get(
@@ -36,6 +59,23 @@ into client website
 router.get(
   "/:id.js",
   getEmbedScript
+);
+
+/*
+========================================
+INVALID ROUTES
+========================================
+*/
+router.use(
+  "*",
+  (req, res) => {
+
+    return res.status(404).json({
+      success: false,
+      error:
+        "Embed route not found",
+    });
+  }
 );
 
 export default router;

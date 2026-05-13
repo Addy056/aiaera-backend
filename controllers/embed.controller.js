@@ -2,192 +2,363 @@ import { supabase } from "../config/supabaseClient.js";
 
 /*
 ========================================
-EMBED SCRIPT
+GET PUBLIC CHATBOT
 ========================================
 */
-export const getEmbedScript = async (
-  req,
-  res
-) => {
+export const getPublicChatbot =
+  async (req, res) => {
 
-  try {
+    try {
 
-    const { id } =
-      req.params;
+      const { id } =
+        req.params;
 
-    /*
-    ========================================
-    VALIDATE CHATBOT
-    ========================================
-    */
-    const {
-      data: chatbot,
-      error,
-    } = await supabase
-      .from("chatbots")
-      .select("*")
-      .eq("id", id)
-      .single();
+      if (!id) {
 
-    if (
-      error ||
-      !chatbot
-    ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Chatbot ID required",
+        });
+      }
 
-      return res
-        .status(404)
-        .send(
-          `console.error("AIAERA: Chatbot not found");`
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("chatbots")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (
+        error ||
+        !data
+      ) {
+
+        console.error(
+          "CHATBOT FETCH ERROR:",
+          error
         );
+
+        return res.status(404).json({
+          success: false,
+          error:
+            "Chatbot not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        chatbot: {
+          id:
+            data.id,
+
+          name:
+            data.name,
+
+          bot_name:
+            data.bot_name,
+
+          business_info:
+            data.business_info,
+
+          website_url:
+            data.website_url,
+
+          theme:
+            data.theme || {},
+
+          user_id:
+            data.user_id,
+        },
+      });
+
+    } catch (err) {
+
+      console.error(
+        "PUBLIC CHATBOT ERROR:",
+        err
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          "Failed to load chatbot",
+      });
     }
+  };
 
-    /*
-    ========================================
-    FRONTEND URL
-    ========================================
-    */
-    const FRONTEND_URL =
-      process.env.FRONTEND_URL ||
-      "http://localhost:5173";
+/*
+========================================
+GET EMBED SCRIPT
+========================================
+*/
+export const getEmbedScript =
+  async (req, res) => {
 
-    /*
-    ========================================
-    WIDGET SCRIPT
-    ========================================
-    */
-    const script = `
+    try {
+
+      const { id } =
+        req.params;
+
+      if (!id) {
+
+        return res.status(400).send(
+          "Chatbot ID required"
+        );
+      }
+
+      /*
+      ========================================
+      URLS
+      ========================================
+      */
+      const frontendUrl =
+        process.env.FRONTEND_URL;
+
+      const backendUrl =
+        process.env.BACKEND_URL;
+
+      /*
+      ========================================
+      EMBED SCRIPT
+      ========================================
+      */
+      const script = `
 (function () {
 
   /*
   ========================================
-  PREVENT MULTIPLE LOADS
+  STOP INSIDE IFRAME
   ========================================
   */
   if (
-    window.AIAERA_WIDGET_LOADED
+    window.self !==
+    window.top
   ) {
     return;
   }
 
-  window.AIAERA_WIDGET_LOADED =
-    true;
+  /*
+  ========================================
+  PREVENT DUPLICATE
+  ========================================
+  */
+  if (
+    document.getElementById(
+      "aiaera-chatbot-widget"
+    )
+  ) {
+    return;
+  }
 
   /*
   ========================================
-  VARIABLES
+  CREATE IFRAME
   ========================================
   */
-  var chatbotId =
-    "${id}";
-
-  var baseUrl =
-    "${FRONTEND_URL}";
-
-  /*
-  ========================================
-  MOBILE CHECK
-  ========================================
-  */
-  var isMobile =
-    window.innerWidth < 768;
-
-  /*
-  ========================================
-  BUTTON
-  ========================================
-  */
-  var button =
+  const iframe =
     document.createElement(
-      "button"
+      "iframe"
     );
 
-  button.innerHTML =
-    "💬";
+  iframe.src =
+    "${frontendUrl}/public-chatbot/${id}";
 
-  button.setAttribute(
-    "aria-label",
-    "Open AI Chat"
+  iframe.id =
+    "aiaera-chatbot-widget";
+
+  iframe.title =
+    "AIAERA Chatbot";
+
+  iframe.allow =
+    "microphone; clipboard-write";
+
+  Object.assign(
+    iframe.style,
+    {
+      position: "fixed",
+
+      bottom: "82px",
+
+      right: "20px",
+
+      width: "340px",
+
+      height: "520px",
+
+      border: "none",
+
+      borderRadius: "24px",
+
+      overflow: "hidden",
+
+      background: "#0B1120",
+
+      zIndex: "999999",
+
+      opacity: "0",
+
+      pointerEvents: "none",
+
+      transform:
+        "translateY(20px) scale(0.95)",
+
+      transition:
+        "all 0.25s ease",
+
+      boxShadow:
+        "0 20px 60px rgba(0,0,0,0.35)",
+    }
   );
 
   /*
   ========================================
-  BUTTON STYLE
+  MOBILE RESPONSIVE
   ========================================
   */
-  button.style.position =
-    "fixed";
+  if (
+    window.innerWidth < 480
+  ) {
 
-  button.style.bottom =
-    isMobile
-      ? "16px"
-      : "24px";
+    iframe.style.width =
+      "92vw";
 
-  button.style.right =
-    isMobile
-      ? "16px"
-      : "24px";
+    iframe.style.height =
+      "75vh";
 
-  button.style.width =
-    isMobile
-      ? "62px"
-      : "68px";
+    iframe.style.right =
+      "4vw";
 
-  button.style.height =
-    isMobile
-      ? "62px"
-      : "68px";
-
-  button.style.border =
-    "none";
-
-  button.style.outline =
-    "none";
-
-  button.style.cursor =
-    "pointer";
-
-  button.style.borderRadius =
-    "50%";
-
-  button.style.background =
-    "linear-gradient(135deg,#7f5af0,#4f46e5)";
-
-  button.style.color =
-    "#ffffff";
-
-  button.style.fontSize =
-    "28px";
-
-  button.style.display =
-    "flex";
-
-  button.style.alignItems =
-    "center";
-
-  button.style.justifyContent =
-    "center";
-
-  button.style.boxShadow =
-    "0 20px 60px rgba(124,58,237,0.45)";
-
-  button.style.transition =
-    "all 0.25s ease";
-
-  button.style.zIndex =
-    "2147483647";
-
-  button.style.visibility =
-    "visible";
-
-  button.style.opacity =
-    "1";
-
-  button.style.pointerEvents =
-    "auto";
+    iframe.style.bottom =
+      "80px";
+  }
 
   /*
   ========================================
-  HOVER
+  CREATE BUTTON
+  ========================================
+  */
+  const button =
+    document.createElement(
+      "button"
+    );
+
+  button.id =
+    "aiaera-chatbot-button";
+
+  button.setAttribute(
+    "aria-label",
+    "Open AI Chatbot"
+  );
+
+  Object.assign(
+    button.style,
+    {
+      position: "fixed",
+
+      bottom: "20px",
+
+      right: "20px",
+
+      width: "62px",
+
+      height: "62px",
+
+      borderRadius: "50%",
+
+      border: "none",
+
+      cursor: "pointer",
+
+      overflow: "hidden",
+
+      background:
+        "linear-gradient(135deg,#7f5af0,#5b8cff)",
+
+      display: "flex",
+
+      alignItems: "center",
+
+      justifyContent: "center",
+
+      boxShadow:
+        "0 12px 35px rgba(127,90,240,0.45)",
+
+      zIndex: "999999",
+
+      transition:
+        "all 0.25s ease",
+    }
+  );
+
+  /*
+  ========================================
+  DEFAULT ICON
+  ========================================
+  */
+  button.innerHTML =
+    \`
+      <div
+        style="
+          width:100%;
+          height:100%;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          color:white;
+          font-size:28px;
+        "
+      >
+        💬
+      </div>
+    \`;
+
+  /*
+  ========================================
+  LOAD BUSINESS LOGO
+  ========================================
+  */
+  fetch(
+    "${backendUrl}/api/embed/chatbot/${id}"
+  )
+    .then((res) =>
+      res.json()
+    )
+    .then((data) => {
+
+      const logo =
+        data?.chatbot?.theme?.logo;
+
+      if (logo) {
+
+        button.innerHTML =
+          \`
+            <img
+              src="\${logo}"
+              alt="logo"
+              style="
+                width:100%;
+                height:100%;
+                object-fit:cover;
+                border-radius:50%;
+              "
+            />
+          \`;
+      }
+    })
+    .catch(() => {
+
+      console.log(
+        "Logo load failed"
+      );
+    });
+
+  /*
+  ========================================
+  HOVER EFFECT
   ========================================
   */
   button.onmouseenter =
@@ -206,388 +377,82 @@ export const getEmbedScript = async (
 
   /*
   ========================================
-  CHAT CONTAINER
+  TOGGLE CHAT
   ========================================
   */
-  var container =
-    document.createElement(
-      "div"
-    );
-
-  container.style.position =
-    "fixed";
-
-  container.style.bottom =
-    isMobile
-      ? "0"
-      : "110px";
-
-  container.style.right =
-    isMobile
-      ? "0"
-      : "40px";
-
-  container.style.width =
-    isMobile
-      ? "100vw"
-      : "350px";
-
-  container.style.height =
-    isMobile
-      ? "100vh"
-      : "600px";
-
-  container.style.maxWidth =
-    "calc(100vw - 20px)";
-
-  container.style.maxHeight =
-    "calc(100vh - 140px)";
-
-  container.style.borderRadius =
-    isMobile
-      ? "0"
-      : "26px";
-
-  container.style.overflow =
-    "hidden";
-
-  container.style.background =
-    "#0B1120";
-
-  container.style.border =
-    "1px solid rgba(255,255,255,0.08)";
-
-  container.style.boxShadow =
-    "0 25px 80px rgba(0,0,0,0.45)";
-
-  container.style.backdropFilter =
-    "blur(20px)";
-
-  container.style.zIndex =
-    "2147483647";
-
-  container.style.display =
-    "none";
-
-  container.style.opacity =
-    "0";
-
-  container.style.transform =
-    "translateY(20px) scale(0.96)";
-
-  container.style.transition =
-    "all 0.25s ease";
-
-  /*
-  ========================================
-  IFRAME
-  ========================================
-  */
-  var iframe =
-    document.createElement(
-      "iframe"
-    );
-
-  iframe.src =
-    baseUrl +
-    "/public-chatbot/" +
-    chatbotId;
-
-  iframe.allow =
-    "microphone; clipboard-write";
-
-  iframe.style.width =
-    "100%";
-
-  iframe.style.height =
-    "100%";
-
-  iframe.style.border =
-    "none";
-
-  iframe.style.display =
-    "block";
-
-  iframe.style.background =
-    "#0B1120";
-
-  iframe.style.visibility =
-    "visible";
-
-  iframe.style.opacity =
-    "1";
-
-  /*
-  ========================================
-  APPEND IFRAME
-  ========================================
-  */
-  container.appendChild(
-    iframe
-  );
-
-  /*
-  ========================================
-  TOGGLE
-  ========================================
-  */
-  var isOpen =
-    false;
+  let open = false;
 
   button.onclick =
     function () {
 
-      isOpen =
-        !isOpen;
+      open = !open;
 
-      if (isOpen) {
+      if (open) {
 
-        container.style.display =
-          "block";
+        iframe.style.opacity =
+          "1";
 
-        requestAnimationFrame(
-          function () {
+        iframe.style.pointerEvents =
+          "auto";
 
-            container.style.opacity =
-              "1";
-
-            container.style.transform =
-              "translateY(0) scale(1)";
-          }
-        );
+        iframe.style.transform =
+          "translateY(0px) scale(1)";
 
       } else {
 
-        container.style.opacity =
+        iframe.style.opacity =
           "0";
 
-        container.style.transform =
-          "translateY(20px) scale(0.96)";
+        iframe.style.pointerEvents =
+          "none";
 
-        setTimeout(
-          function () {
-
-            container.style.display =
-              "none";
-
-          },
-          250
-        );
+        iframe.style.transform =
+          "translateY(20px) scale(0.95)";
       }
     };
 
   /*
   ========================================
-  ESC CLOSE
-  ========================================
-  */
-  document.addEventListener(
-    "keydown",
-    function (e) {
-
-      if (
-        e.key === "Escape" &&
-        isOpen
-      ) {
-
-        container.style.opacity =
-          "0";
-
-        container.style.transform =
-          "translateY(20px) scale(0.96)";
-
-        setTimeout(
-          function () {
-
-            container.style.display =
-              "none";
-
-          },
-          250
-        );
-
-        isOpen =
-          false;
-      }
-    }
-  );
-
-  /*
-  ========================================
-  RESPONSIVE RESIZE
-  ========================================
-  */
-  window.addEventListener(
-    "resize",
-    function () {
-
-      var mobile =
-        window.innerWidth < 768;
-
-      if (mobile) {
-
-        container.style.width =
-          "100vw";
-
-        container.style.height =
-          "100vh";
-
-        container.style.bottom =
-          "0";
-
-        container.style.right =
-          "0";
-
-        container.style.borderRadius =
-          "0";
-
-      } else {
-
-        container.style.width =
-          "350px";
-
-        container.style.height =
-          "600px";
-
-        container.style.bottom =
-          "110px";
-
-        container.style.right =
-          "40px";
-
-        container.style.borderRadius =
-          "26px";
-      }
-    }
-  );
-
-  /*
-  ========================================
-  APPEND TO BODY
+  APPEND ELEMENTS
   ========================================
   */
   document.body.appendChild(
-    button
+    iframe
   );
 
   document.body.appendChild(
-    container
+    button
   );
 
 })();
 `;
 
-    /*
-    ========================================
-    RESPONSE HEADERS
-    ========================================
-    */
-    res.setHeader(
-      "Content-Type",
-      "application/javascript"
-    );
-
-    res.setHeader(
-      "Cache-Control",
-      "public, max-age=3600"
-    );
-
-    res.setHeader(
-      "Access-Control-Allow-Origin",
-      "*"
-    );
-
-    return res.send(
-      script
-    );
-
-  } catch (err) {
-
-    console.error(
-      "EMBED SCRIPT ERROR:",
-      err
-    );
-
-    return res
-      .status(500)
-      .send(
-        'console.error("AIAERA widget failed to load");'
+      /*
+      ========================================
+      HEADERS
+      ========================================
+      */
+      res.setHeader(
+        "Content-Type",
+        "application/javascript"
       );
-  }
-};
 
-/*
-========================================
-PUBLIC CHATBOT DATA
-========================================
-*/
-export const getPublicChatbot =
-  async (
-    req,
-    res
-  ) => {
+      res.setHeader(
+        "Cache-Control",
+        "public, max-age=3600"
+      );
 
-    try {
-
-      const { id } =
-        req.params;
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("chatbots")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (
-        error ||
-        !data
-      ) {
-
-        return res.status(404).json({
-          success: false,
-          error:
-            "Chatbot not found",
-        });
-      }
-
-      return res.json({
-        success: true,
-
-        chatbot: {
-          id:
-            data.id,
-
-          bot_name:
-            data.bot_name,
-
-          business_info:
-            data.business_info,
-
-          website_url:
-            data.website_url,
-
-          logo_url:
-            data.logo_url || "",
-
-          theme:
-            data.theme || {},
-        },
-      });
+      res.send(script);
 
     } catch (err) {
 
       console.error(
-        "PUBLIC CHATBOT ERROR:",
+        "EMBED SCRIPT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          "Server error",
-      });
+      res.status(500).send(
+        "Embed script failed"
+      );
     }
   };
