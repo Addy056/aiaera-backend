@@ -23,6 +23,60 @@ export const saveIntegration =
         maps,
       } = req.body;
 
+      /*
+      ========================================
+      BUILD UPDATE OBJECT
+      ========================================
+      */
+      const updateData = {
+        user_id,
+      };
+
+      if (
+        whatsapp_token !== undefined
+      ) {
+
+        updateData.whatsapp_token =
+          whatsapp_token;
+      }
+
+      if (
+        whatsapp_phone_id !== undefined
+      ) {
+
+        updateData.whatsapp_phone_id =
+          whatsapp_phone_id;
+      }
+
+      if (
+        facebook !== undefined
+      ) {
+
+        updateData.facebook =
+          facebook;
+      }
+
+      if (
+        calendly !== undefined
+      ) {
+
+        updateData.calendly =
+          calendly;
+      }
+
+      if (
+        maps !== undefined
+      ) {
+
+        updateData.maps =
+          maps;
+      }
+
+      /*
+      ========================================
+      UPSERT
+      ========================================
+      */
       const {
         data,
         error,
@@ -31,26 +85,7 @@ export const saveIntegration =
           "user_integrations"
         )
         .upsert(
-          [
-            {
-              user_id,
-
-              whatsapp_token:
-                whatsapp_token || "",
-
-              whatsapp_phone_id:
-                whatsapp_phone_id || "",
-
-              facebook:
-                facebook || "",
-
-              calendly:
-                calendly || "",
-
-              maps:
-                maps || "",
-            },
-          ],
+          [updateData],
           {
             onConflict:
               "user_id",
@@ -69,13 +104,16 @@ export const saveIntegration =
         return res
           .status(400)
           .json({
+            success: false,
             error,
           });
       }
 
-      return res.json(
-        data
-      );
+      return res.json({
+        success: true,
+        integrations:
+          data,
+      });
 
     } catch (err) {
 
@@ -85,6 +123,7 @@ export const saveIntegration =
       );
 
       return res.status(500).json({
+        success: false,
         error:
           "Internal server error",
       });
