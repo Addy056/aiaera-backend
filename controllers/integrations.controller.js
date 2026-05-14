@@ -45,10 +45,17 @@ export const saveIntegration =
 
         /*
         ====================================
+        GENERIC MEETING
+        ====================================
+        */
+        provider,
+        meeting_link,
+
+        /*
+        ====================================
         OTHER
         ====================================
         */
-        calendly,
         maps,
 
       } = req.body;
@@ -167,18 +174,32 @@ export const saveIntegration =
 
       /*
       ========================================
-      OTHER
+      GENERIC MEETING PROVIDER
       ========================================
       */
       if (
-        calendly !== undefined
+        provider !== undefined
       ) {
 
-        updateData.calendly =
-          calendly?.trim() ||
+        updateData.provider =
+          provider?.trim() ||
+          "calendly";
+      }
+
+      if (
+        meeting_link !== undefined
+      ) {
+
+        updateData.meeting_link =
+          meeting_link?.trim() ||
           null;
       }
 
+      /*
+      ========================================
+      MAPS
+      ========================================
+      */
       if (
         maps !== undefined
       ) {
@@ -431,7 +452,8 @@ export const getPublicIntegrations =
           "user_integrations"
         )
         .select(`
-          calendly,
+          provider,
+          meeting_link,
           maps
         `)
         .eq(
@@ -453,9 +475,14 @@ export const getPublicIntegrations =
 
           integrations: {
 
-            calendly: "",
+            provider:
+              "calendly",
 
-            maps: "",
+            meeting_link:
+              "",
+
+            maps:
+              "",
           },
         });
       }
@@ -471,8 +498,12 @@ export const getPublicIntegrations =
 
         integrations: {
 
-          calendly:
-            integrations.calendly ||
+          provider:
+            integrations.provider ||
+            "calendly",
+
+          meeting_link:
+            integrations.meeting_link ||
             "",
 
           maps:
@@ -636,11 +667,6 @@ export const testConnection =
         platform,
       } = req.body;
 
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
       return res.status(200).json({
 
         success: true,

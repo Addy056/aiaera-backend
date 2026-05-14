@@ -1,5 +1,4 @@
 import axios from "axios";
-
 import Groq from "groq-sdk";
 
 import { supabase }
@@ -64,8 +63,8 @@ export const verifyWebhook =
     } catch (err) {
 
       console.error(
-        "WEBHOOK VERIFY ERROR:",
-        err
+        "❌ WEBHOOK VERIFY ERROR:",
+        err.message
       );
 
       return res
@@ -103,7 +102,7 @@ export const receiveWebhook =
 
       /*
       ========================================
-      ACKNOWLEDGE FAST
+      FAST ACKNOWLEDGEMENT
       ========================================
       */
       res.sendStatus(200);
@@ -113,68 +112,122 @@ export const receiveWebhook =
       VALIDATE EVENT
       ========================================
       */
-      if (
-        !body.entry?.[0]
+      const messageData =
+        body?.entry?.[0]
           ?.changes?.[0]
-          ?.value?.messages?.[0]
-      ) {
+          ?.value?.messages?.[0];
+
+      if (!messageData) {
+
+        console.log(
+          "⚠️ No message data"
+        );
 
         return;
       }
 
-      const change =
-        body.entry[0]
-          .changes[0];
+      /*
+      ========================================
+      IGNORE NON TEXT MESSAGES
+      ========================================
+      */
+      if (
+        messageData.type !==
+        "text"
+      ) {
+
+        console.log(
+          "⚠️ Non-text message ignored"
+        );
+
+        return;
+      }
 
       const value =
-        change.value;
-
-      const messageData =
-        value.messages[0];
+        body.entry[0]
+          .changes[0]
+          .value;
 
       /*
       ========================================
-      GET PHONE NUMBER ID
+      GET MESSAGE DETAILS
       ========================================
       */
       const phoneNumberId =
         value?.metadata
           ?.phone_number_id;
 
-      console.log(
-        "📞 PHONE NUMBER ID:",
-        phoneNumberId
-      );
-
-      /*
-      ========================================
-      USER MESSAGE
-      ========================================
-      */
       const userMessage =
-        messageData?.text?.body;
+        messageData?.text?.body
+          ?.trim();
 
-      /*
-      ========================================
-      USER PHONE
-      ========================================
-      */
-      const from =
+      const customerPhone =
         messageData.from;
 
-      if (!userMessage) {
+      const profileName =
+        value?.contacts?.[0]
+          ?.profile?.name ||
+        "WhatsApp User";
 
-        console.log(
-          "No text message found"
-        );
-
-        return;
-      }
+      const messageId =
+        messageData.id;
 
       console.log(
         "📨 MESSAGE:",
         userMessage
       );
+
+      console.log(
+        "👤 CUSTOMER:",
+        profileName
+      );
+
+      console.log(
+        "📞 PHONE:",
+        customerPhone
+      );
+
+      if (!userMessage) {
+        return;
+      }
+
+      /*
+      ========================================
+      DUPLICATE MESSAGE CHECK
+      ========================================
+      */
+      const {
+        data: existingMessage,
+      } = await supabase
+        .from(
+          "messages_handled"
+        )
+        .select("id")
+        .eq(
+          "message_id",
+          messageId
+        )
+        .maybeSingle();
+
+      if (existingMessage) {
+
+        console.log(
+          "⚠️ Duplicate webhook ignored"
+        );
+
+        return;
+      }
+
+      await supabase
+        .from(
+          "messages_handled"
+        )
+        .insert([
+          {
+            message_id:
+              messageId,
+          },
+        ]);
 
       /*
       ========================================
@@ -201,7 +254,11 @@ export const receiveWebhook =
       ) {
 
         console.error(
-          "No WhatsApp integration found"
+          "❌ No WhatsApp integration found"
+        );
+
+        console.error(
+          integrationError
         );
 
         return;
@@ -217,7 +274,7 @@ export const receiveWebhook =
       ) {
 
         console.log(
-          "WhatsApp automation disabled"
+          "⚠️ WhatsApp automation disabled"
         );
 
         return;
@@ -233,7 +290,39 @@ export const receiveWebhook =
       ) {
 
         console.error(
-          "WhatsApp token missing"
+          "❌ WhatsApp token missing"
+        );
+
+        return;
+      }
+
+      /*
+      ========================================
+      CHECK SUBSCRIPTION
+      ========================================
+      */
+      const {
+        data: subscription,
+      } = await supabase
+        .from(
+          "user_subscriptions"
+        )
+        .select("*")
+        .eq(
+          "user_id",
+          integration.user_id
+        )
+        .single();
+
+      if (
+        subscription?.expires_at &&
+        new Date(
+          subscription.expires_at
+        ) < new Date()
+      ) {
+
+        console.log(
+          "❌ Subscription expired"
         );
 
         return;
@@ -263,10 +352,76 @@ export const receiveWebhook =
       ) {
 
         console.error(
-          "Chatbot not found"
+          "❌ Chatbot not found"
+        );
+
+        console.error(
+          chatbotError
         );
 
         return;
+      }
+
+      /*
+      ========================================
+      SAVE LEAD
+      ========================================
+      */
+      try {
+
+        const leadMessage = `
+WhatsApp Lead
+
+Phone:
+${customerPhone}
+
+Message:
+${userMessage}
+`;
+
+        const {
+          error: leadError,
+        } = await supabase
+          .from("leads")
+          .insert([
+            {
+              user_id:
+                integration.user_id,
+
+              chatbot_id:
+                chatbot.id,
+
+              name:
+                profileName,
+
+              email:
+                `${customerPhone}@whatsapp.aiaera`,
+
+              message:
+                leadMessage,
+            },
+          ]);
+
+        if (leadError) {
+
+          console.error(
+            "❌ LEAD SAVE ERROR:",
+            leadError
+          );
+
+        } else {
+
+          console.log(
+            "✅ WhatsApp lead saved"
+          );
+        }
+
+      } catch (leadErr) {
+
+        console.error(
+          "❌ LEAD ERROR:",
+          leadErr
+        );
       }
 
       /*
@@ -291,6 +446,8 @@ Rules:
 - Keep replies short
 - Answer professionally
 - Help customers clearly
+- Sound human
+- Never say you are AI
 `;
 
       /*
@@ -344,7 +501,7 @@ Rules:
       } catch (groqError) {
 
         console.error(
-          "GROQ ERROR:",
+          "❌ GROQ ERROR:",
           groqError.message
         );
       }
@@ -362,10 +519,12 @@ Rules:
           messaging_product:
             "whatsapp",
 
-          to: from,
+          to:
+            customerPhone,
 
           text: {
-            body: aiReply,
+            body:
+              aiReply,
           },
         },
 
@@ -388,7 +547,7 @@ Rules:
     } catch (err) {
 
       console.error(
-        "WHATSAPP WEBHOOK ERROR:",
+        "❌ WHATSAPP WEBHOOK ERROR:",
         err.response?.data ||
         err.message ||
         err

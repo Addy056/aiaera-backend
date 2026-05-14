@@ -3,29 +3,47 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
 import morgan from "morgan";
+import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
 
-import { fileURLToPath } from "url";
+import { fileURLToPath }
+  from "url";
 
 /*
 ========================================
 ROUTES
 ========================================
 */
-import chatbotRoutes from "./routes/chatbot.routes.js";
-import leadsRoutes from "./routes/leads.routes.js";
-import appointmentsRoutes from "./routes/appointments.routes.js";
-import integrationsRoutes from "./routes/integrations.routes.js";
-import embedRoutes from "./routes/embed.routes.js";
-import uploadRoutes from "./routes/upload.routes.js";
-import paymentRoutes from "./routes/payment.routes.js";
-import publicRoutes from "./routes/public.routes.js";
-import whatsappRoutes from "./routes/whatsapp.routes.js";
-/*
-========================================
-NEW WEBHOOK ROUTES
-========================================
-*/
-import webhookRoutes from "./routes/webhook.routes.js";
+import chatbotRoutes
+  from "./routes/chatbot.routes.js";
+
+import leadsRoutes
+  from "./routes/leads.routes.js";
+
+import appointmentsRoutes
+  from "./routes/appointments.routes.js";
+
+import integrationsRoutes
+  from "./routes/integrations.routes.js";
+
+import embedRoutes
+  from "./routes/embed.routes.js";
+
+import uploadRoutes
+  from "./routes/upload.routes.js";
+
+import paymentRoutes
+  from "./routes/payment.routes.js";
+
+import publicRoutes
+  from "./routes/public.routes.js";
+
+import whatsappRoutes
+  from "./routes/whatsapp.routes.js";
+
+import webhookRoutes
+  from "./routes/webhook.routes.js";
 
 /*
 ========================================
@@ -97,50 +115,86 @@ requiredEnv.forEach(
 
 /*
 ========================================
+SECURITY
+========================================
+*/
+app.use(
+  helmet({
+    crossOriginResourcePolicy:
+      false,
+  })
+);
+
+/*
+========================================
+COMPRESSION
+========================================
+*/
+app.use(
+  compression()
+);
+
+/*
+========================================
+RATE LIMITER
+========================================
+*/
+const apiLimiter =
+  rateLimit({
+    windowMs:
+      15 * 60 * 1000,
+
+    max: 500,
+
+    standardHeaders:
+      true,
+
+    legacyHeaders:
+      false,
+
+    message: {
+      success: false,
+      error:
+        "Too many requests",
+    },
+  });
+
+app.use(
+  "/api",
+  apiLimiter
+);
+
+/*
+========================================
 CORS CONFIG
 ========================================
 */
 const allowedOrigins = [
 
-  /*
-  ========================================
-  LOCAL
-  ========================================
-  */
   "http://localhost:5173",
 
   "http://localhost:3000",
 
-  /*
-  ========================================
-  PRODUCTION DOMAINS
-  ========================================
-  */
   "https://aiaera.in",
 
   "https://www.aiaera.in",
 
   "https://aiaera-frontend.vercel.app",
 
-  /*
-  ========================================
-  ENV URL
-  ========================================
-  */
   process.env.FRONTEND_URL,
 
 ].filter(Boolean);
 
 app.use(
   cors({
-    origin: function (
+    origin: (
       origin,
       callback
-    ) {
+    ) => {
 
       /*
       ========================================
-      SERVER / POSTMAN
+      POSTMAN / SERVER REQUESTS
       ========================================
       */
       if (!origin) {
@@ -170,7 +224,7 @@ app.use(
 
       /*
       ========================================
-      VERCEL PREVIEW SUPPORT
+      VERCEL PREVIEW
       ========================================
       */
       if (
@@ -192,9 +246,8 @@ app.use(
 
       return callback(
         new Error(
-          `CORS blocked origin: ${origin}`
-        ),
-        false
+          `CORS blocked: ${origin}`
+        )
       );
     },
 
@@ -218,25 +271,20 @@ app.use(
 
 /*
 ========================================
-PREFLIGHT REQUESTS
+PREFLIGHT
 ========================================
 */
-app.options(
-  "*",
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
-);
+app.options("*", cors());
 
 /*
 ========================================
+WHATSAPP WEBHOOK PARSER
 IMPORTANT:
-META WEBHOOKS REQUIRE RAW BODY
+Must come BEFORE global parser
 ========================================
 */
 app.use(
-  "/api/webhooks",
+  "/api/whatsapp",
   express.json({
     limit: "20mb",
   })
@@ -244,7 +292,7 @@ app.use(
 
 /*
 ========================================
-BODY PARSER
+BODY PARSERS
 ========================================
 */
 app.use(
@@ -266,7 +314,12 @@ LOGGER
 ========================================
 */
 app.use(
-  morgan("dev")
+  morgan(
+    process.env.NODE_ENV ===
+      "production"
+      ? "combined"
+      : "dev"
+  )
 );
 
 /*
@@ -285,7 +338,7 @@ app.use(
 
 /*
 ========================================
-ROOT ROUTE
+ROOT
 ========================================
 */
 app.get(
@@ -297,6 +350,12 @@ app.get(
 
       message:
         "AIAERA Backend Running 🚀",
+
+      environment:
+        process.env.NODE_ENV,
+
+      uptime:
+        process.uptime(),
     });
   }
 );
@@ -318,6 +377,9 @@ app.get(
 
       timestamp:
         new Date().toISOString(),
+
+      uptime:
+        process.uptime(),
     });
   }
 );
@@ -371,11 +433,7 @@ app.use(
   "/api/whatsapp",
   whatsappRoutes
 );
-/*
-========================================
-NEW WEBHOOK ROUTES
-========================================
-*/
+
 app.use(
   "/api/webhooks",
   webhookRoutes
@@ -383,7 +441,7 @@ app.use(
 
 /*
 ========================================
-STATIC EMBED SCRIPT
+EMBED SCRIPT
 ========================================
 */
 app.get(
@@ -444,8 +502,7 @@ app.use(
       success: false,
 
       error:
-        process.env
-          .NODE_ENV ===
+        process.env.NODE_ENV ===
         "production"
           ? "Internal server error"
           : err.message,
@@ -467,11 +524,12 @@ const PORT =
 START SERVER
 ========================================
 */
-app.listen(
-  PORT,
-  () => {
+const server =
+  app.listen(
+    PORT,
+    () => {
 
-    console.log(`
+      console.log(`
 ========================================
 🚀 AIAERA BACKEND RUNNING
 ========================================
@@ -489,9 +547,60 @@ HEALTH:
 http://localhost:${PORT}/api/test
 
 WHATSAPP WEBHOOK:
-http://localhost:${PORT}/api/webhooks/whatsapp
+http://localhost:${PORT}/api/whatsapp/webhook
 
 ========================================
 `);
+    }
+  );
+
+/*
+========================================
+GRACEFUL SHUTDOWN
+========================================
+*/
+process.on(
+  "SIGTERM",
+  () => {
+
+    console.log(
+      "🛑 SIGTERM received"
+    );
+
+    server.close(() => {
+
+      console.log(
+        "✅ Server closed"
+      );
+
+      process.exit(0);
+    });
+  }
+);
+
+/*
+========================================
+UNHANDLED ERRORS
+========================================
+*/
+process.on(
+  "unhandledRejection",
+  (reason) => {
+
+    console.error(
+      "❌ UNHANDLED REJECTION:",
+      reason
+    );
+  }
+);
+
+process.on(
+  "uncaughtException",
+  (error) => {
+
+    console.error(
+      "❌ UNCAUGHT EXCEPTION:",
+      error
+    );
   }
 );

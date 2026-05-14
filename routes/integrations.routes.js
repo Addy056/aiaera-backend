@@ -6,7 +6,7 @@ import {
   getPublicIntegrations,
   toggleAutomation,
   testConnection,
-} from "../controllers/integrations.controller.js";
+} from "../controllers/integration.controller.js";
 
 import {
   authMiddleware,
@@ -18,7 +18,12 @@ const router =
 /*
 ========================================
 PUBLIC INTEGRATIONS
-USED BY EMBED CHATBOT
+USED BY PUBLIC CHATBOT
+========================================
+Returns:
+- provider
+- meeting_link
+- maps
 ========================================
 */
 router.get(
@@ -28,14 +33,25 @@ router.get(
 
 /*
 ========================================
-USER INTEGRATIONS
-(PROTECTED)
+PROTECTED ROUTES
+========================================
+Requires Auth
 ========================================
 */
 
 /*
 ========================================
-SAVE INTEGRATIONS
+SAVE USER INTEGRATIONS
+========================================
+Supports:
+- WhatsApp
+- Facebook
+- Instagram
+- Calendly
+- Zoom
+- Teams
+- Google Meet
+- Custom booking links
 ========================================
 */
 router.post(
@@ -46,7 +62,7 @@ router.post(
 
 /*
 ========================================
-GET INTEGRATIONS
+GET USER INTEGRATIONS
 ========================================
 */
 router.get(
@@ -58,6 +74,11 @@ router.get(
 /*
 ========================================
 TOGGLE AUTOMATION
+========================================
+Platforms:
+- whatsapp
+- facebook
+- instagram
 ========================================
 */
 router.patch(
@@ -83,14 +104,49 @@ HEALTH CHECK
 ========================================
 */
 router.get(
-  "/test-route",
+  "/health",
   (req, res) => {
 
-    return res.json({
+    return res.status(200).json({
+
       success: true,
 
       message:
-        "Integrations route working ✅",
+        "Integrations API working ✅",
+    });
+  }
+);
+
+/*
+========================================
+DEBUG ROUTE
+========================================
+*/
+router.get(
+  "/debug",
+  (req, res) => {
+
+    return res.status(200).json({
+
+      success: true,
+
+      routes: {
+
+        public:
+          "/api/integrations/public/:chatbotId",
+
+        save:
+          "POST /api/integrations",
+
+        get:
+          "GET /api/integrations",
+
+        toggle:
+          "PATCH /api/integrations/toggle",
+
+        test:
+          "POST /api/integrations/test",
+      },
     });
   }
 );

@@ -57,7 +57,7 @@ export const createChatbot =
           },
         ])
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         throw error;
@@ -163,7 +163,7 @@ export const getChatbotConfig =
           "user_id",
           req.user.id
         )
-        .single();
+        .maybeSingle();
 
       if (
         error ||
@@ -228,7 +228,7 @@ export const updateChatbot =
           req.user.id
         )
         .select()
-        .single();
+        .maybeSingle();
 
       if (error) {
         throw error;
@@ -412,7 +412,7 @@ export const chatWithBot =
           "id",
           chatbot_id
         )
-        .single();
+        .maybeSingle();
 
       if (
         chatbotError ||
@@ -430,6 +430,26 @@ export const chatWithBot =
             "Chatbot not found",
         });
       }
+
+      /*
+      ========================================
+      GET INTEGRATIONS
+      ========================================
+      */
+      const {
+  data: integrations,
+} = await supabase
+  .from("user_integrations")
+  .select(`
+    provider,
+    meeting_link,
+    maps
+  `)
+  .eq(
+    "user_id",
+    chatbot.user_id
+  )
+  .maybeSingle();
 
       /*
       ========================================
@@ -472,32 +492,92 @@ export const chatWithBot =
       const lowerMessage =
         message.toLowerCase();
 
+      /*
+      ========================================
+      APPOINTMENT DETECTION
+      ========================================
+      */
       if (
-        lowerMessage.includes("appointment") ||
-        lowerMessage.includes("meeting") ||
-        lowerMessage.includes("book")
-      ) {
+  lowerMessage.includes("appointment") ||
+  lowerMessage.includes("meeting") ||
+  lowerMessage.includes("book") ||
+  lowerMessage.includes("schedule") ||
+  lowerMessage.includes("demo") ||
+  lowerMessage.includes("consultation") ||
+  lowerMessage.includes("call") ||
+  lowerMessage.includes("zoom") ||
+  lowerMessage.includes("consult")
+) {
+
+        if (
+  integrations?.meeting_link &&
+  integrations.meeting_link.trim() !== ""
+) {
+
+          const providerName =
+            integrations.provider === "zoom"
+              ? "Zoom"
+              : integrations.provider === "teams"
+              ? "Microsoft Teams"
+              : integrations.provider === "meet"
+              ? "Google Meet"
+              : integrations.provider === "custom"
+              ? "Meeting"
+              : "Calendly";
+
+          return res.json({
+            success: true,
+            reply:
+`📅 You can book an appointment using ${providerName}:
+
+${integrations.meeting_link}`,
+          });
+        }
 
         return res.json({
           success: true,
           reply:
-            "📅 You can book an appointment using the booking button above.",
+            "Booking is currently unavailable.",
         });
       }
 
+      /*
+      ========================================
+      LOCATION DETECTION
+      ========================================
+      */
       if (
         lowerMessage.includes("office") ||
         lowerMessage.includes("location") ||
-        lowerMessage.includes("visit")
+        lowerMessage.includes("visit") ||
+        lowerMessage.includes("address")
       ) {
+
+        if (
+          integrations?.maps
+        ) {
+
+          return res.json({
+            success: true,
+            reply:
+`📍 Visit our office here:
+
+${integrations.maps}`,
+          });
+        }
 
         return res.json({
           success: true,
           reply:
-            "📍 You can view our office location using the Visit Office button above.",
+            "Office location is currently unavailable.",
         });
       }
 
+      /*
+      ========================================
+      SYSTEM PROMPT
+      ========================================
+      */
       const systemPrompt = `
 You are a real human customer support and sales representative for ${
   chatbot.bot_name ||
@@ -526,6 +606,18 @@ TRAINING DATA:
 ${
   trainingContent ||
   "No training data"
+}
+
+BOOKING PROVIDER:
+${
+  integrations?.provider ||
+  "Not configured"
+}
+
+BOOKING LINK:
+${
+  integrations?.meeting_link ||
+  "Not configured"
 }
 
 IMPORTANT BEHAVIOR RULES:
@@ -557,9 +649,6 @@ naturally ask for:
 - email
 - phone number
 
-Example style:
-"Could you also share your email and phone number so our team can assist you better?"
-
 IMPORTANT:
 - Ask naturally
 - Do not sound robotic
@@ -569,11 +658,21 @@ IMPORTANT:
 
 APPOINTMENTS:
 If users want to book or schedule,
-guide them to use the booking button.
+share this booking link naturally:
+
+${
+  integrations?.meeting_link ||
+  "Booking unavailable"
+}
 
 LOCATION:
 If users ask for office location,
-guide them to use the Visit Office button.
+share this map link naturally:
+
+${
+  integrations?.maps ||
+  "Location unavailable"
+}
 `;
 
       /*
