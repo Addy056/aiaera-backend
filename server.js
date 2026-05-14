@@ -22,6 +22,13 @@ import publicRoutes from "./routes/public.routes.js";
 
 /*
 ========================================
+NEW WEBHOOK ROUTES
+========================================
+*/
+import webhookRoutes from "./routes/webhook.routes.js";
+
+/*
+========================================
 ENV CONFIG
 ========================================
 */
@@ -197,6 +204,7 @@ app.use(
       "GET",
       "POST",
       "PUT",
+      "PATCH",
       "DELETE",
       "OPTIONS",
     ],
@@ -218,6 +226,19 @@ app.options(
   cors({
     origin: allowedOrigins,
     credentials: true,
+  })
+);
+
+/*
+========================================
+IMPORTANT:
+META WEBHOOKS REQUIRE RAW BODY
+========================================
+*/
+app.use(
+  "/api/webhooks",
+  express.json({
+    limit: "20mb",
   })
 );
 
@@ -348,6 +369,16 @@ app.use(
 
 /*
 ========================================
+NEW WEBHOOK ROUTES
+========================================
+*/
+app.use(
+  "/api/webhooks",
+  webhookRoutes
+);
+
+/*
+========================================
 STATIC EMBED SCRIPT
 ========================================
 */
@@ -440,6 +471,7 @@ app.listen(
 ========================================
 🚀 AIAERA BACKEND RUNNING
 ========================================
+
 MODE:
 ${process.env.NODE_ENV || "development"}
 
@@ -451,6 +483,10 @@ http://localhost:${PORT}
 
 HEALTH:
 http://localhost:${PORT}/api/test
+
+WHATSAPP WEBHOOK:
+http://localhost:${PORT}/api/webhooks/whatsapp
+
 ========================================
 `);
   }

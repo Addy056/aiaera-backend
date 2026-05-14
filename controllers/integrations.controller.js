@@ -1,10 +1,9 @@
-import axios from "axios";
-import { supabase } from "../config/supabaseClient.js";
-import { chatWithBot } from "./chatbot.controller.js";
+import { supabase }
+  from "../config/supabaseClient.js";
 
 /*
 ========================================
-SAVE INTEGRATION
+SAVE INTEGRATIONS
 ========================================
 */
 export const saveIntegration =
@@ -16,11 +15,42 @@ export const saveIntegration =
         req.user.id;
 
       const {
+
+        /*
+        ====================================
+        WHATSAPP
+        ====================================
+        */
         whatsapp_token,
         whatsapp_phone_id,
-        facebook,
+        whatsapp_enabled,
+
+        /*
+        ====================================
+        FACEBOOK
+        ====================================
+        */
+        facebook_page_id,
+        facebook_page_token,
+        facebook_enabled,
+
+        /*
+        ====================================
+        INSTAGRAM
+        ====================================
+        */
+        instagram_business_id,
+        instagram_access_token,
+        instagram_enabled,
+
+        /*
+        ====================================
+        OTHER
+        ====================================
+        */
         calendly,
         maps,
+
       } = req.body;
 
       /*
@@ -32,6 +62,11 @@ export const saveIntegration =
         user_id,
       };
 
+      /*
+      ========================================
+      WHATSAPP
+      ========================================
+      */
       if (
         whatsapp_token !== undefined
       ) {
@@ -49,13 +84,76 @@ export const saveIntegration =
       }
 
       if (
-        facebook !== undefined
+        whatsapp_enabled !== undefined
       ) {
 
-        updateData.facebook =
-          facebook;
+        updateData.whatsapp_enabled =
+          whatsapp_enabled;
       }
 
+      /*
+      ========================================
+      FACEBOOK
+      ========================================
+      */
+      if (
+        facebook_page_id !== undefined
+      ) {
+
+        updateData.facebook_page_id =
+          facebook_page_id;
+      }
+
+      if (
+        facebook_page_token !== undefined
+      ) {
+
+        updateData.facebook_page_token =
+          facebook_page_token;
+      }
+
+      if (
+        facebook_enabled !== undefined
+      ) {
+
+        updateData.facebook_enabled =
+          facebook_enabled;
+      }
+
+      /*
+      ========================================
+      INSTAGRAM
+      ========================================
+      */
+      if (
+        instagram_business_id !== undefined
+      ) {
+
+        updateData.instagram_business_id =
+          instagram_business_id;
+      }
+
+      if (
+        instagram_access_token !== undefined
+      ) {
+
+        updateData.instagram_access_token =
+          instagram_access_token;
+      }
+
+      if (
+        instagram_enabled !== undefined
+      ) {
+
+        updateData.instagram_enabled =
+          instagram_enabled;
+      }
+
+      /*
+      ========================================
+      OTHER
+      ========================================
+      */
       if (
         calendly !== undefined
       ) {
@@ -105,12 +203,14 @@ export const saveIntegration =
           .status(400)
           .json({
             success: false,
-            error,
+            error:
+              error.message,
           });
       }
 
-      return res.json({
+      return res.status(200).json({
         success: true,
+
         integrations:
           data,
       });
@@ -118,12 +218,13 @@ export const saveIntegration =
     } catch (err) {
 
       console.error(
-        "CONTROLLER ERROR:",
+        "SAVE INTEGRATION CONTROLLER ERROR:",
         err
       );
 
       return res.status(500).json({
         success: false,
+
         error:
           "Internal server error",
       });
@@ -132,7 +233,7 @@ export const saveIntegration =
 
 /*
 ========================================
-GET INTEGRATION
+GET USER INTEGRATIONS
 ========================================
 */
 export const getIntegration =
@@ -164,23 +265,23 @@ export const getIntegration =
           error
         );
 
-        return res.json(
-          {}
-        );
+        return res.json({});
       }
 
-      return res.json(
+      return res.status(200).json(
         data
       );
 
     } catch (err) {
 
       console.error(
-        "GET CONTROLLER ERROR:",
+        "GET INTEGRATION CONTROLLER ERROR:",
         err
       );
 
       return res.status(500).json({
+        success: false,
+
         error:
           "Internal server error",
       });
@@ -190,7 +291,7 @@ export const getIntegration =
 /*
 ========================================
 GET PUBLIC INTEGRATIONS
-USED BY EMBED CHATBOT
+USED BY PUBLIC CHATBOT
 ========================================
 */
 export const getPublicIntegrations =
@@ -255,8 +356,7 @@ export const getPublicIntegrations =
       ========================================
       */
       const {
-        data:
-          integrations,
+        data: integrations,
         error:
           integrationsError,
       } = await supabase
@@ -264,7 +364,10 @@ export const getPublicIntegrations =
           "user_integrations"
         )
         .select(
-          "calendly, maps"
+          `
+          calendly,
+          maps
+          `
         )
         .eq(
           "user_id",
@@ -291,6 +394,7 @@ export const getPublicIntegrations =
         success: true,
 
         integrations: {
+
           calendly:
             integrations.calendly ||
             "",
@@ -319,249 +423,148 @@ export const getPublicIntegrations =
 
 /*
 ========================================
-VERIFY WHATSAPP WEBHOOK
+TOGGLE AUTOMATION
 ========================================
 */
-export const verifyWhatsApp =
-  (
-    req,
-    res
-  ) => {
+export const toggleAutomation =
+  async (req, res) => {
 
-    const VERIFY_TOKEN =
-      process.env
-        .WHATSAPP_VERIFY_TOKEN;
+    try {
 
-    const mode =
-      req.query[
-        "hub.mode"
-      ];
+      const user_id =
+        req.user.id;
 
-    const token =
-      req.query[
-        "hub.verify_token"
-      ];
+      const {
+        platform,
+        enabled,
+      } = req.body;
 
-    const challenge =
-      req.query[
-        "hub.challenge"
-      ];
+      /*
+      ========================================
+      PLATFORM FIELD MAP
+      ========================================
+      */
+      const fieldMap = {
 
-    if (
-      mode ===
-        "subscribe" &&
-      token ===
-        VERIFY_TOKEN
-    ) {
+        whatsapp:
+          "whatsapp_enabled",
 
-      return res
-        .status(200)
-        .send(
-          challenge
+        facebook:
+          "facebook_enabled",
+
+        instagram:
+          "instagram_enabled",
+      };
+
+      const field =
+        fieldMap[
+          platform
+        ];
+
+      if (!field) {
+
+        return res.status(400).json({
+          success: false,
+
+          error:
+            "Invalid platform",
+        });
+      }
+
+      /*
+      ========================================
+      UPDATE
+      ========================================
+      */
+      const {
+        error,
+      } = await supabase
+        .from(
+          "user_integrations"
+        )
+        .update({
+          [field]:
+            enabled,
+        })
+        .eq(
+          "user_id",
+          user_id
         );
 
-    } else {
+      if (error) {
 
-      return res.sendStatus(
-        403
+        console.error(
+          "TOGGLE ERROR:",
+          error
+        );
+
+        return res.status(400).json({
+          success: false,
+
+          error:
+            error.message,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+
+        platform,
+
+        enabled,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "TOGGLE AUTOMATION ERROR:",
+        err
       );
+
+      return res.status(500).json({
+        success: false,
+
+        error:
+          "Internal server error",
+      });
     }
   };
 
 /*
 ========================================
-HANDLE WHATSAPP WEBHOOK
+TEST CONNECTION
 ========================================
 */
-export const handleWhatsAppWebhook =
-  async (
-    req,
-    res
-  ) => {
+export const testConnection =
+  async (req, res) => {
 
     try {
 
-      const body =
-        req.body;
+      const {
+        platform,
+      } = req.body;
 
-      if (
-        body.object
-      ) {
+      return res.status(200).json({
+        success: true,
 
-        const msg =
-          body.entry?.[0]
-            ?.changes?.[0]
-            ?.value
-            ?.messages?.[0];
+        platform,
 
-        if (!msg) {
-
-          return res.sendStatus(
-            200
-          );
-        }
-
-        const from =
-          msg.from;
-
-        const text =
-          msg.text?.body;
-
-        console.log(
-          "Incoming:",
-          text
-        );
-
-        /*
-        ========================================
-        FIND USER BY PHONE ID
-        ========================================
-        */
-        const phone_id =
-          body.entry?.[0]
-            ?.changes?.[0]
-            ?.value
-            ?.metadata
-            ?.phone_number_id;
-
-        const {
-          data:
-            integration,
-        } = await supabase
-          .from(
-            "user_integrations"
-          )
-          .select("*")
-          .eq(
-            "whatsapp_phone_id",
-            phone_id
-          )
-          .single();
-
-        if (
-          !integration
-        ) {
-
-          return res.sendStatus(
-            200
-          );
-        }
-
-        /*
-        ========================================
-        GET CHATBOT
-        ========================================
-        */
-        const {
-          data: chatbot,
-        } = await supabase
-          .from(
-            "chatbots"
-          )
-          .select("*")
-          .eq(
-            "user_id",
-            integration.user_id
-          )
-          .limit(1)
-          .single();
-
-        if (
-          !chatbot
-        ) {
-
-          return res.sendStatus(
-            200
-          );
-        }
-
-        /*
-        ========================================
-        GENERATE AI REPLY
-        ========================================
-        */
-        const session_id =
-          from;
-
-        const fakeReq = {
-          body: {
-            message:
-              text,
-
-            chatbot_id:
-              chatbot.id,
-
-            session_id,
-          },
-        };
-
-        let replyText =
-          "Sorry, something went wrong.";
-
-        const fakeRes = {
-          json: (
-            data
-          ) => {
-
-            replyText =
-              data.reply;
-          },
-        };
-
-        await chatWithBot(
-          fakeReq,
-          fakeRes
-        );
-
-        /*
-        ========================================
-        SEND WHATSAPP MESSAGE
-        ========================================
-        */
-        await axios.post(
-          `https://graph.facebook.com/v19.0/${integration.whatsapp_phone_id}/messages`,
-          {
-            messaging_product:
-              "whatsapp",
-
-            to: from,
-
-            text: {
-              body:
-                replyText,
-            },
-          },
-          {
-            headers: {
-              Authorization:
-                `Bearer ${integration.whatsapp_token}`,
-
-              "Content-Type":
-                "application/json",
-            },
-          }
-        );
-
-        return res.sendStatus(
-          200
-        );
-      }
-
-      return res.sendStatus(
-        404
-      );
+        message:
+          `${platform} connection test successful`,
+      });
 
     } catch (err) {
 
       console.error(
-        "Webhook Error:",
-        err.response
-          ?.data ||
-          err.message
+        "TEST CONNECTION ERROR:",
+        err
       );
 
-      return res.sendStatus(
-        500
-      );
+      return res.status(500).json({
+        success: false,
+
+        error:
+          "Connection test failed",
+      });
     }
   };

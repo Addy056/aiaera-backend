@@ -4,8 +4,8 @@ import {
   saveIntegration,
   getIntegration,
   getPublicIntegrations,
-  verifyWhatsApp,
-  handleWhatsAppWebhook,
+  toggleAutomation,
+  testConnection,
 } from "../controllers/integrations.controller.js";
 
 import {
@@ -28,18 +28,27 @@ router.get(
 
 /*
 ========================================
-USER INTEGRATIONS (PROTECTED)
+USER INTEGRATIONS
+(PROTECTED)
 ========================================
 */
 
-// Save integrations
+/*
+========================================
+SAVE INTEGRATIONS
+========================================
+*/
 router.post(
   "/",
   authMiddleware,
   saveIntegration
 );
 
-// Get integrations
+/*
+========================================
+GET INTEGRATIONS
+========================================
+*/
 router.get(
   "/",
   authMiddleware,
@@ -48,33 +57,38 @@ router.get(
 
 /*
 ========================================
-WHATSAPP WEBHOOK (PUBLIC)
+TOGGLE AUTOMATION
 ========================================
 */
-
-// Verification (Meta setup)
-router.get(
-  "/whatsapp/webhook",
-  verifyWhatsApp
-);
-
-// Incoming messages
-router.post(
-  "/whatsapp/webhook",
-  handleWhatsAppWebhook
+router.patch(
+  "/toggle",
+  authMiddleware,
+  toggleAutomation
 );
 
 /*
 ========================================
-HEALTH CHECK (DEBUG)
+TEST CONNECTION
+========================================
+*/
+router.post(
+  "/test",
+  authMiddleware,
+  testConnection
+);
+
+/*
+========================================
+HEALTH CHECK
 ========================================
 */
 router.get(
-  "/test",
+  "/test-route",
   (req, res) => {
 
-    res.json({
+    return res.json({
       success: true,
+
       message:
         "Integrations route working ✅",
     });
