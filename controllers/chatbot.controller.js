@@ -550,7 +550,7 @@ RULES:
           await groq.chat.completions.create(
             {
               model:
-                "llama3-70b-8192",
+                "llama-3.1-8b-instant",
 
               temperature:
                 0.7,
