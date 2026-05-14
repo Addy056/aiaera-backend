@@ -122,10 +122,29 @@ export const receiveWebhook =
         return;
       }
 
-      const messageData =
+      const change =
         body.entry[0]
-          .changes[0]
-          .value.messages[0];
+          .changes[0];
+
+      const value =
+        change.value;
+
+      const messageData =
+        value.messages[0];
+
+      /*
+      ========================================
+      GET PHONE NUMBER ID
+      ========================================
+      */
+      const phoneNumberId =
+        value?.metadata
+          ?.phone_number_id;
+
+      console.log(
+        "📞 PHONE NUMBER ID:",
+        phoneNumberId
+      );
 
       /*
       ========================================
@@ -144,6 +163,11 @@ export const receiveWebhook =
         messageData.from;
 
       if (!userMessage) {
+
+        console.log(
+          "No text message found"
+        );
+
         return;
       }
 
@@ -154,11 +178,12 @@ export const receiveWebhook =
 
       /*
       ========================================
-      GET INTEGRATION
+      GET USER INTEGRATION
       ========================================
       */
       const {
         data: integration,
+        error: integrationError,
       } = await supabase
         .from(
           "user_integrations"
@@ -166,15 +191,49 @@ export const receiveWebhook =
         .select("*")
         .eq(
           "whatsapp_phone_id",
-          process.env
-            .WHATSAPP_PHONE_NUMBER_ID
+          phoneNumberId
         )
         .single();
 
-      if (!integration) {
+      if (
+        integrationError ||
+        !integration
+      ) {
 
         console.error(
           "No WhatsApp integration found"
+        );
+
+        return;
+      }
+
+      /*
+      ========================================
+      AUTOMATION DISABLED
+      ========================================
+      */
+      if (
+        !integration.whatsapp_enabled
+      ) {
+
+        console.log(
+          "WhatsApp automation disabled"
+        );
+
+        return;
+      }
+
+      /*
+      ========================================
+      TOKEN CHECK
+      ========================================
+      */
+      if (
+        !integration.whatsapp_token
+      ) {
+
+        console.error(
+          "WhatsApp token missing"
         );
 
         return;
@@ -187,6 +246,7 @@ export const receiveWebhook =
       */
       const {
         data: chatbot,
+        error: chatbotError,
       } = await supabase
         .from("chatbots")
         .select("*")
@@ -196,6 +256,18 @@ export const receiveWebhook =
         )
         .limit(1)
         .single();
+
+      if (
+        chatbotError ||
+        !chatbot
+      ) {
+
+        console.error(
+          "Chatbot not found"
+        );
+
+        return;
+      }
 
       /*
       ========================================
@@ -284,7 +356,7 @@ Rules:
       */
       await axios.post(
 
-        `https://graph.facebook.com/v19.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        `https://graph.facebook.com/v19.0/${integration.whatsapp_phone_id}/messages`,
 
         {
           messaging_product:
@@ -301,7 +373,7 @@ Rules:
           headers: {
 
             Authorization:
-              `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
+              `Bearer ${integration.whatsapp_token}`,
 
             "Content-Type":
               "application/json",
