@@ -267,11 +267,6 @@ export const deleteChatbot =
       const { id } =
         req.params;
 
-      /*
-      ========================================
-      DELETE TRAINING DATA
-      ========================================
-      */
       await supabase
         .from(
           "chatbot_file_data"
@@ -282,11 +277,6 @@ export const deleteChatbot =
           id
         );
 
-      /*
-      ========================================
-      DELETE FILES
-      ========================================
-      */
       await supabase
         .from(
           "chatbot_files"
@@ -297,11 +287,6 @@ export const deleteChatbot =
           id
         );
 
-      /*
-      ========================================
-      DELETE LEADS
-      ========================================
-      */
       await supabase
         .from("leads")
         .delete()
@@ -310,11 +295,6 @@ export const deleteChatbot =
           id
         );
 
-      /*
-      ========================================
-      DELETE APPOINTMENTS
-      ========================================
-      */
       await supabase
         .from(
           "appointments"
@@ -325,11 +305,6 @@ export const deleteChatbot =
           id
         );
 
-      /*
-      ========================================
-      DELETE CHATBOT
-      ========================================
-      */
       const { error } =
         await supabase
           .from(
@@ -383,7 +358,6 @@ export const chatWithBot =
       const {
         message,
         chatbot_id,
-        session_id,
       } = req.body;
 
       /*
@@ -400,6 +374,26 @@ export const chatWithBot =
           success: false,
           reply:
             "Invalid request",
+        });
+      }
+
+      /*
+      ========================================
+      CHECK GROQ KEY
+      ========================================
+      */
+      if (
+        !process.env.GROQ_API_KEY
+      ) {
+
+        console.error(
+          "GROQ API KEY MISSING"
+        );
+
+        return res.status(500).json({
+          success: false,
+          reply:
+            "AI service unavailable",
         });
       }
 
@@ -444,7 +438,6 @@ export const chatWithBot =
       */
       const {
         data: trainingData,
-        error: trainingError,
       } = await supabase
         .from(
           "chatbot_file_data"
@@ -454,14 +447,6 @@ export const chatWithBot =
           "chatbot_id",
           chatbot_id
         );
-
-      if (trainingError) {
-
-        console.error(
-          "TRAINING DATA ERROR:",
-          trainingError
-        );
-      }
 
       /*
       ========================================
@@ -478,6 +463,40 @@ export const chatWithBot =
           )
           .join("\n\n")
           .slice(0, 12000);
+
+      /*
+      ========================================
+      QUICK REPLIES
+      ========================================
+      */
+      const lowerMessage =
+        message.toLowerCase();
+
+      if (
+        lowerMessage.includes("appointment") ||
+        lowerMessage.includes("meeting") ||
+        lowerMessage.includes("book")
+      ) {
+
+        return res.json({
+          success: true,
+          reply:
+            "📅 You can book an appointment using the booking button above.",
+        });
+      }
+
+      if (
+        lowerMessage.includes("office") ||
+        lowerMessage.includes("location") ||
+        lowerMessage.includes("visit")
+      ) {
+
+        return res.json({
+          success: true,
+          reply:
+            "📍 You can view our office location using the Visit Office button above.",
+        });
+      }
 
       /*
       ========================================
@@ -509,112 +528,131 @@ ${
 }
 
 RULES:
-- Be conversational and human-like
-- Keep responses concise and useful
+- Be conversational and professional
+- Keep responses concise
 - Use business knowledge whenever relevant
-- Prioritize uploaded training data
-- Ask follow-up questions naturally
-- Help convert visitors into leads
-- If unsure, answer honestly
+- Use uploaded training data first
+- Answer naturally
+- Help customers clearly
+- If unsure, say you don't know
 `;
 
       /*
       ========================================
-      GENERATE AI RESPONSE
+      GENERATE RESPONSE
       ========================================
       */
-      const completion =
-        await groq.chat.completions.create(
-          {
-            model:
-              "llama3-70b-8192",
+      let completion;
 
-            temperature:
-              0.7,
+      try {
 
-            max_tokens:
-              500,
+        completion =
+          await groq.chat.completions.create(
+            {
+              model:
+                "llama3-70b-8192",
 
-            messages: [
-              {
-                role:
-                  "system",
+              temperature:
+                0.7,
 
-                content:
-                  systemPrompt,
-              },
-              {
-                role:
-                  "user",
+              max_tokens:
+                500,
 
-                content:
-                  message,
-              },
-            ],
-          }
+              messages: [
+                {
+                  role:
+                    "system",
+
+                  content:
+                    systemPrompt,
+                },
+                {
+                  role:
+                    "user",
+
+                  content:
+                    message,
+                },
+              ],
+            }
+          );
+
+      } catch (groqError) {
+
+        console.error(
+          "GROQ ERROR:",
+          groqError
         );
+
+        return res.status(500).json({
+          success: false,
+          reply:
+            "AI service temporarily unavailable",
+        });
+      }
 
       /*
       ========================================
-      GET REPLY
+      SAFE RESPONSE
       ========================================
       */
       const reply =
         completion
           ?.choices?.[0]
           ?.message
-          ?.content ||
-        "Sorry, I couldn't generate a response.";
+          ?.content
+          ?.trim() ||
+        "I'm here to help you.";
 
       /*
       ========================================
-      EXTRACT LEAD DATA
+      EXTRACT LEADS
       ========================================
       */
-      const leadData =
-        extractLeadData(
-          message
+      try {
+
+        const leadData =
+          extractLeadData(
+            message
+          );
+
+        if (
+          leadData?.isLead
+        ) {
+
+          await supabase
+            .from("leads")
+            .insert([
+              {
+                chatbot_id,
+
+                user_id:
+                  chatbot.user_id,
+
+                name:
+                  leadData.name ||
+                  "Unknown",
+
+                email:
+                  leadData.email ||
+                  null,
+
+                message,
+              },
+            ]);
+        }
+
+      } catch (leadError) {
+
+        console.error(
+          "LEAD EXTRACTION ERROR:",
+          leadError
         );
-
-      /*
-      ========================================
-      SAVE LEAD
-      ========================================
-      */
-      if (
-        leadData?.isLead
-      ) {
-
-        const {
-          email,
-          name,
-        } = leadData;
-
-        await supabase
-          .from("leads")
-          .insert([
-            {
-              chatbot_id,
-
-              user_id:
-                chatbot.user_id,
-
-              name:
-                name ||
-                "Unknown",
-
-              email:
-                email ||
-                null,
-
-              message,
-            },
-          ]);
       }
 
       /*
       ========================================
-      RETURN RESPONSE
+      SUCCESS
       ========================================
       */
       return res.json({
@@ -664,21 +702,11 @@ export const scrapeWebsiteTraining =
         });
       }
 
-      /*
-      ========================================
-      SCRAPE WEBSITE
-      ========================================
-      */
       const content =
         await scrapeWebsite(
           website_url
         );
 
-      /*
-      ========================================
-      SAVE TRAINING DATA
-      ========================================
-      */
       const { error } =
         await supabase
           .from(

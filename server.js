@@ -67,6 +67,7 @@ ENV VALIDATION
 const requiredEnv = [
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "GROQ_API_KEY",
 ];
 
 requiredEnv.forEach(
@@ -214,7 +215,10 @@ PREFLIGHT REQUESTS
 */
 app.options(
   "*",
-  cors()
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
 );
 
 /*
