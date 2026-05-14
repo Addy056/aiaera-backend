@@ -6,7 +6,7 @@ import {
   getPublicIntegrations,
   toggleAutomation,
   testConnection,
-} from "../controllers/integration.controller.js";
+} from "../controllers/integrations.controller.js";
 
 import {
   authMiddleware,
