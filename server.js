@@ -19,7 +19,7 @@ import embedRoutes from "./routes/embed.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import publicRoutes from "./routes/public.routes.js";
-
+import whatsappRoutes from "./routes/whatsapp.routes.js";
 /*
 ========================================
 NEW WEBHOOK ROUTES
@@ -367,6 +367,10 @@ app.use(
   paymentRoutes
 );
 
+app.use(
+  "/api/whatsapp",
+  whatsappRoutes
+);
 /*
 ========================================
 NEW WEBHOOK ROUTES

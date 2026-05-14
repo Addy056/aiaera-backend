@@ -59,7 +59,11 @@ export const saveIntegration =
       ========================================
       */
       const updateData = {
+
         user_id,
+
+        updated_at:
+          new Date().toISOString(),
       };
 
       /*
@@ -72,7 +76,8 @@ export const saveIntegration =
       ) {
 
         updateData.whatsapp_token =
-          whatsapp_token;
+          whatsapp_token?.trim() ||
+          null;
       }
 
       if (
@@ -80,7 +85,8 @@ export const saveIntegration =
       ) {
 
         updateData.whatsapp_phone_id =
-          whatsapp_phone_id;
+          whatsapp_phone_id?.trim() ||
+          null;
       }
 
       if (
@@ -88,7 +94,9 @@ export const saveIntegration =
       ) {
 
         updateData.whatsapp_enabled =
-          whatsapp_enabled;
+          Boolean(
+            whatsapp_enabled
+          );
       }
 
       /*
@@ -101,7 +109,8 @@ export const saveIntegration =
       ) {
 
         updateData.facebook_page_id =
-          facebook_page_id;
+          facebook_page_id?.trim() ||
+          null;
       }
 
       if (
@@ -109,7 +118,8 @@ export const saveIntegration =
       ) {
 
         updateData.facebook_page_token =
-          facebook_page_token;
+          facebook_page_token?.trim() ||
+          null;
       }
 
       if (
@@ -117,7 +127,9 @@ export const saveIntegration =
       ) {
 
         updateData.facebook_enabled =
-          facebook_enabled;
+          Boolean(
+            facebook_enabled
+          );
       }
 
       /*
@@ -130,7 +142,8 @@ export const saveIntegration =
       ) {
 
         updateData.instagram_business_id =
-          instagram_business_id;
+          instagram_business_id?.trim() ||
+          null;
       }
 
       if (
@@ -138,7 +151,8 @@ export const saveIntegration =
       ) {
 
         updateData.instagram_access_token =
-          instagram_access_token;
+          instagram_access_token?.trim() ||
+          null;
       }
 
       if (
@@ -146,7 +160,9 @@ export const saveIntegration =
       ) {
 
         updateData.instagram_enabled =
-          instagram_enabled;
+          Boolean(
+            instagram_enabled
+          );
       }
 
       /*
@@ -159,7 +175,8 @@ export const saveIntegration =
       ) {
 
         updateData.calendly =
-          calendly;
+          calendly?.trim() ||
+          null;
       }
 
       if (
@@ -167,7 +184,8 @@ export const saveIntegration =
       ) {
 
         updateData.maps =
-          maps;
+          maps?.trim() ||
+          null;
       }
 
       /*
@@ -203,12 +221,19 @@ export const saveIntegration =
           .status(400)
           .json({
             success: false,
+
             error:
               error.message,
           });
       }
 
+      /*
+      ========================================
+      SUCCESS
+      ========================================
+      */
       return res.status(200).json({
+
         success: true,
 
         integrations:
@@ -223,6 +248,7 @@ export const saveIntegration =
       );
 
       return res.status(500).json({
+
         success: false,
 
         error:
@@ -258,19 +284,59 @@ export const getIntegration =
         )
         .single();
 
-      if (error) {
+      /*
+      ========================================
+      NO DATA
+      ========================================
+      */
+      if (
+        error &&
+        error.code !==
+          "PGRST116"
+      ) {
 
         console.error(
           "GET INTEGRATION ERROR:",
           error
         );
 
-        return res.json({});
+        return res.status(400).json({
+
+          success: false,
+
+          error:
+            error.message,
+        });
       }
 
-      return res.status(200).json(
-        data
-      );
+      /*
+      ========================================
+      EMPTY RESPONSE
+      ========================================
+      */
+      if (!data) {
+
+        return res.status(200).json({
+
+          success: true,
+
+          integrations:
+            null,
+        });
+      }
+
+      /*
+      ========================================
+      SUCCESS
+      ========================================
+      */
+      return res.status(200).json({
+
+        success: true,
+
+        integrations:
+          data,
+      });
 
     } catch (err) {
 
@@ -280,6 +346,7 @@ export const getIntegration =
       );
 
       return res.status(500).json({
+
         success: false,
 
         error:
@@ -306,6 +373,7 @@ export const getPublicIntegrations =
       if (!chatbotId) {
 
         return res.status(400).json({
+
           success: false,
 
           error:
@@ -343,6 +411,7 @@ export const getPublicIntegrations =
         );
 
         return res.status(404).json({
+
           success: false,
 
           error:
@@ -357,40 +426,47 @@ export const getPublicIntegrations =
       */
       const {
         data: integrations,
-        error:
-          integrationsError,
       } = await supabase
         .from(
           "user_integrations"
         )
-        .select(
-          `
+        .select(`
           calendly,
           maps
-          `
-        )
+        `)
         .eq(
           "user_id",
           chatbot.user_id
         )
         .single();
 
-      if (
-        integrationsError ||
-        !integrations
-      ) {
+      /*
+      ========================================
+      DEFAULT RESPONSE
+      ========================================
+      */
+      if (!integrations) {
 
         return res.status(200).json({
+
           success: true,
 
           integrations: {
+
             calendly: "",
+
             maps: "",
           },
         });
       }
 
+      /*
+      ========================================
+      SUCCESS
+      ========================================
+      */
       return res.status(200).json({
+
         success: true,
 
         integrations: {
@@ -413,6 +489,7 @@ export const getPublicIntegrations =
       );
 
       return res.status(500).json({
+
         success: false,
 
         error:
@@ -464,6 +541,7 @@ export const toggleAutomation =
       if (!field) {
 
         return res.status(400).json({
+
           success: false,
 
           error:
@@ -483,8 +561,14 @@ export const toggleAutomation =
           "user_integrations"
         )
         .update({
+
           [field]:
-            enabled,
+            Boolean(
+              enabled
+            ),
+
+          updated_at:
+            new Date().toISOString(),
         })
         .eq(
           "user_id",
@@ -499,6 +583,7 @@ export const toggleAutomation =
         );
 
         return res.status(400).json({
+
           success: false,
 
           error:
@@ -506,7 +591,13 @@ export const toggleAutomation =
         });
       }
 
+      /*
+      ========================================
+      SUCCESS
+      ========================================
+      */
       return res.status(200).json({
+
         success: true,
 
         platform,
@@ -522,6 +613,7 @@ export const toggleAutomation =
       );
 
       return res.status(500).json({
+
         success: false,
 
         error:
@@ -544,7 +636,13 @@ export const testConnection =
         platform,
       } = req.body;
 
+      /*
+      ========================================
+      SUCCESS
+      ========================================
+      */
       return res.status(200).json({
+
         success: true,
 
         platform,
@@ -561,6 +659,7 @@ export const testConnection =
       );
 
       return res.status(500).json({
+
         success: false,
 
         error:
