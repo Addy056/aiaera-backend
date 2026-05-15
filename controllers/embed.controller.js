@@ -38,22 +38,97 @@ export const getPublicChatbot = async (
       });
     }
 
+    /*
+    ========================================
+    PARSE THEME SAFELY
+    ========================================
+    */
+    let parsedTheme = {};
+
+    if (
+      typeof data.theme ===
+      "string"
+    ) {
+
+      try {
+
+        parsedTheme =
+          JSON.parse(
+            data.theme
+          );
+
+      } catch (err) {
+
+        console.error(
+          "THEME PARSE ERROR:",
+          err
+        );
+
+        parsedTheme = {};
+      }
+
+    } else {
+
+      parsedTheme =
+        data.theme || {};
+    }
+
+    /*
+    ========================================
+    RESPONSE
+    ========================================
+    */
     return res.status(200).json({
       success: true,
 
       chatbot: {
         id: data.id,
+
         name: data.name,
-        bot_name: data.bot_name,
+
+        bot_name:
+          data.bot_name,
+
         business_info:
           data.business_info,
+
         website_url:
           data.website_url,
-        theme: data.theme || {},
-        user_id: data.user_id,
+
+        theme: {
+          botName:
+            parsedTheme.botName ||
+            data.bot_name ||
+            "Assistant",
+
+          logo:
+            parsedTheme.logo ||
+            "",
+
+          chatBg:
+            parsedTheme.chatBg ||
+            "#161126",
+
+          botBubble:
+            parsedTheme.botBubble ||
+            "rgba(255,255,255,0.06)",
+
+          userBubble:
+            parsedTheme.userBubble ||
+            "#7f5af0",
+
+          textColor:
+            parsedTheme.textColor ||
+            "#ffffff",
+        },
+
+        user_id:
+          data.user_id,
       },
     });
+
   } catch (err) {
+
     console.error(
       "PUBLIC CHATBOT ERROR:",
       err
@@ -61,7 +136,8 @@ export const getPublicChatbot = async (
 
     return res.status(500).json({
       success: false,
-      error: "Failed to load chatbot",
+      error:
+        "Failed to load chatbot",
     });
   }
 };
@@ -76,12 +152,17 @@ export const getEmbedScript = async (
   res
 ) => {
   try {
-    const { id } = req.params;
+
+    const { id } =
+      req.params;
 
     if (!id) {
+
       return res
         .status(400)
-        .send("Chatbot ID required");
+        .send(
+          "Chatbot ID required"
+        );
     }
 
     /*
@@ -149,16 +230,16 @@ export const getEmbedScript = async (
     iframe.style,
     {
       position: "fixed",
-      bottom: "90px",
+      bottom: "88px",
       right: "20px",
-      width: "380px",
-      height: "650px",
+      width: "390px",
+      height: "700px",
       maxWidth: "95vw",
       maxHeight: "85vh",
       border: "none",
-      borderRadius: "24px",
+      borderRadius: "28px",
       overflow: "hidden",
-      background: "#ffffff",
+      background: "#0B1120",
       zIndex: "999999",
       display: "none",
       boxShadow:
@@ -195,19 +276,19 @@ export const getEmbedScript = async (
     } else {
 
       iframe.style.width =
-        "380px";
+        "390px";
 
       iframe.style.height =
-        "650px";
+        "700px";
 
       iframe.style.right =
         "20px";
 
       iframe.style.bottom =
-        "90px";
+        "88px";
 
       iframe.style.borderRadius =
-        "24px";
+        "28px";
     }
   }
 
@@ -240,8 +321,8 @@ export const getEmbedScript = async (
     button.style,
     {
       position: "fixed",
-      bottom: "20px",
-      right: "20px",
+      bottom: "18px",
+      right: "18px",
       width: "64px",
       height: "64px",
       borderRadius: "50%",
@@ -399,7 +480,9 @@ export const getEmbedScript = async (
     );
 
     return res.send(script);
+
   } catch (err) {
+
     console.error(
       "EMBED SCRIPT ERROR:",
       err
@@ -407,6 +490,8 @@ export const getEmbedScript = async (
 
     return res
       .status(500)
-      .send("Embed script failed");
+      .send(
+        "Embed script failed"
+      );
   }
 };
