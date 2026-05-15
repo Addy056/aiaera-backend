@@ -42,6 +42,37 @@ export const checkSubscription =
 
       /*
       ========================================
+      DEV BYPASS
+      ========================================
+      */
+      const DEV_EMAIL =
+        "aiaera056@gmail.com";
+
+      if (
+        req.user.email ===
+        DEV_EMAIL
+      ) {
+
+        console.log(
+          "✅ DEV ACCOUNT BYPASS"
+        );
+
+        req.subscription = {
+          id: "dev-bypass",
+
+          plan: "pro",
+
+          expires_at:
+            "2099-12-31",
+
+          active: true,
+        };
+
+        return next();
+      }
+
+      /*
+      ========================================
       GET SUBSCRIPTION
       ========================================
       */
