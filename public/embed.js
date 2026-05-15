@@ -63,11 +63,11 @@
 
   /*
   ========================================
-  URLS
+  PRODUCTION URLS
   ========================================
   */
   const FRONTEND_URL =
-    "https://aiaera-frontend-cydkxf2g9-addys-projects-a0059c03.vercel.app";
+    "https://aiaera.in";
 
   const API_URL =
     "https://aiaera-backend.onrender.com";
@@ -145,25 +145,52 @@
   MOBILE RESPONSIVE
   ========================================
   */
-  if (
-    window.innerWidth < 480
-  ) {
+  function handleResponsive() {
 
-    iframe.style.width =
-      "95vw";
+    if (
+      window.innerWidth < 480
+    ) {
 
-    iframe.style.height =
-      "80vh";
+      iframe.style.width =
+        "95vw";
 
-    iframe.style.right =
-      "2.5vw";
+      iframe.style.height =
+        "80vh";
 
-    iframe.style.bottom =
-      "82px";
+      iframe.style.right =
+        "2.5vw";
 
-    iframe.style.borderRadius =
-      "24px";
+      iframe.style.bottom =
+        "82px";
+
+      iframe.style.borderRadius =
+        "24px";
+
+    } else {
+
+      iframe.style.width =
+        "390px";
+
+      iframe.style.height =
+        "700px";
+
+      iframe.style.right =
+        "20px";
+
+      iframe.style.bottom =
+        "88px";
+
+      iframe.style.borderRadius =
+        "28px";
+    }
   }
+
+  handleResponsive();
+
+  window.addEventListener(
+    "resize",
+    handleResponsive
+  );
 
   /*
   ========================================
