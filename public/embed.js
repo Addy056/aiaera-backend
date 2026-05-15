@@ -2,18 +2,6 @@
 
   /*
   ========================================
-  STOP IF INSIDE IFRAME
-  ========================================
-  */
-  if (
-    window.self !==
-    window.top
-  ) {
-    return;
-  }
-
-  /*
-  ========================================
   PREVENT DUPLICATES
   ========================================
   */
@@ -67,10 +55,7 @@
   ========================================
   */
   const FRONTEND_URL =
-   "https://aiaera-frontend.vercel.app";
-
-  const API_URL =
-      "https://aiaera-backend.onrender.com";
+    "https://aiaera-frontend.vercel.app";
 
   /*
   ========================================
@@ -102,18 +87,13 @@
     {
       position: "fixed",
 
-      bottom: "88px",
+      bottom: "90px",
 
       right: "20px",
 
-      /*
-      ========================================
-      FINAL FIXED DIMENSIONS
-      ========================================
-      */
-      width: "420px",
+      width: "390px",
 
-      height: "520px",
+      height: "700px",
 
       border: "none",
 
@@ -135,10 +115,10 @@
         "none",
 
       transform:
-        "translateY(20px) scale(0.96)",
+        "translateY(20px)",
 
       transition:
-        "all 0.22s ease",
+        "all 0.25s ease",
 
       boxShadow:
         "0 25px 80px rgba(0,0,0,0.45)",
@@ -158,13 +138,13 @@
       "95vw";
 
     iframe.style.height =
-      "66vh";
+      "80vh";
 
     iframe.style.right =
       "2.5vw";
 
     iframe.style.bottom =
-      "82px";
+      "85px";
 
     iframe.style.borderRadius =
       "24px";
@@ -183,23 +163,18 @@
   button.id =
     "aiaera-chatbot-button";
 
-  button.setAttribute(
-    "aria-label",
-    "Open AI Chatbot"
-  );
-
   Object.assign(
     button.style,
     {
       position: "fixed",
 
-      bottom: "18px",
+      bottom: "20px",
 
-      right: "18px",
+      right: "20px",
 
-      width: "62px",
+      width: "65px",
 
-      height: "62px",
+      height: "65px",
 
       borderRadius:
         "50%",
@@ -207,8 +182,6 @@
       border: "none",
 
       cursor: "pointer",
-
-      overflow: "hidden",
 
       background:
         "linear-gradient(135deg,#7f5af0,#5b8cff)",
@@ -227,15 +200,10 @@
       zIndex: "999999",
 
       transition:
-        "all 0.22s ease",
+        "all 0.2s ease",
     }
   );
 
-  /*
-  ========================================
-  DEFAULT BUTTON
-  ========================================
-  */
   button.innerHTML =
     `
       <div
@@ -255,155 +223,73 @@
 
   /*
   ========================================
-  LOAD BUSINESS LOGO
+  TOGGLE
   ========================================
   */
-  fetch(
-  `${API_URL}/api/embed/chatbot/${chatbotId}`
-)
-    .then(async (res) => {
+  let opened = false;
 
-      if (!res.ok) {
+  button.onclick = () => {
 
-        throw new Error(
-          "Failed to load chatbot"
-        );
-      }
+    opened = !opened;
 
-      return res.json();
-    })
-    .then((data) => {
+    if (opened) {
 
-      console.log(
-        "CHATBOT DATA:",
-        data
-      );
+      iframe.style.opacity =
+        "1";
 
-      const logo =
-        data?.chatbot?.theme
-          ?.logo;
+      iframe.style.visibility =
+        "visible";
 
-      /*
-      ========================================
-      APPLY LOGO
-      ========================================
-      */
-      if (
-        logo &&
-        typeof logo ===
-          "string"
-      ) {
+      iframe.style.pointerEvents =
+        "auto";
 
-        const img =
-          new Image();
+      iframe.style.transform =
+        "translateY(0)";
 
-        img.onload =
-          function () {
+      button.innerHTML =
+        `
+          <div
+            style="
+              color:white;
+              font-size:30px;
+              font-weight:bold;
+            "
+          >
+            ×
+          </div>
+        `;
 
-            button.innerHTML =
-              `
-                <img
-                  src="${logo}"
-                  alt="logo"
-                  style="
-                    width:100%;
-                    height:100%;
-                    object-fit:cover;
-                    border-radius:50%;
-                  "
-                />
-              `;
-          };
+    } else {
 
-        img.onerror =
-          function () {
+      iframe.style.opacity =
+        "0";
 
-            console.error(
-              "Logo image failed to load:",
-              logo
-            );
-          };
+      iframe.style.visibility =
+        "hidden";
 
-        img.src = logo;
-      }
+      iframe.style.pointerEvents =
+        "none";
 
-    })
-    .catch((err) => {
+      iframe.style.transform =
+        "translateY(20px)";
 
-      console.error(
-        "Logo load failed:",
-        err
-      );
-    });
+      button.innerHTML =
+        `
+          <div
+            style="
+              color:white;
+              font-size:28px;
+            "
+          >
+            💬
+          </div>
+        `;
+    }
+  };
 
   /*
   ========================================
-  HOVER EFFECT
-  ========================================
-  */
-  button.onmouseenter =
-    function () {
-
-      button.style.transform =
-        "scale(1.08)";
-    };
-
-  button.onmouseleave =
-    function () {
-
-      button.style.transform =
-        "scale(1)";
-    };
-
-  /*
-  ========================================
-  TOGGLE CHAT
-  ========================================
-  */
-  let isOpen = false;
-
-  button.onclick =
-    function () {
-
-      isOpen = !isOpen;
-
-      if (isOpen) {
-
-        iframe.style.visibility =
-          "visible";
-
-        iframe.style.opacity =
-          "1";
-
-        iframe.style.pointerEvents =
-          "auto";
-
-        iframe.style.transform =
-          "translateY(0px) scale(1)";
-
-      } else {
-
-        iframe.style.opacity =
-          "0";
-
-        iframe.style.pointerEvents =
-          "none";
-
-        iframe.style.transform =
-          "translateY(20px) scale(0.96)";
-
-        setTimeout(() => {
-
-          iframe.style.visibility =
-            "hidden";
-
-        }, 200);
-      }
-    };
-
-  /*
-  ========================================
-  APPEND ELEMENTS
+  APPEND TO BODY
   ========================================
   */
   document.body.appendChild(
