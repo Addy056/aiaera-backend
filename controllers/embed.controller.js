@@ -215,7 +215,7 @@ export const getEmbedScript = async (
     );
 
   iframe.src =
-  "${frontendUrl}/public-chatbot/${id}?embed=true";
+    "${frontendUrl}/public-chatbot/${id}?embed=true";
 
   iframe.id =
     "aiaera-chatbot-widget";
@@ -232,14 +232,12 @@ export const getEmbedScript = async (
       position: "fixed",
       bottom: "88px",
       right: "20px",
-      width: "390px",
-      height: "700px",
-      maxWidth: "95vw",
-      maxHeight: "85vh",
+      width: "380px",
+      height: "640px",
       border: "none",
       borderRadius: "28px",
       overflow: "hidden",
-      background: "transparent",
+      background: "#ffffff",
       zIndex: "999999",
       display: "none",
       boxShadow:
@@ -276,10 +274,10 @@ export const getEmbedScript = async (
     } else {
 
       iframe.style.width =
-        "390px";
+        "380px";
 
       iframe.style.height =
-        "700px";
+        "640px";
 
       iframe.style.right =
         "20px";
