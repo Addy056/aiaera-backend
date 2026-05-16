@@ -10,9 +10,12 @@ export const getPublicChatbot = async (
   res
 ) => {
   try {
-    const { id } = req.params;
+
+    const { id } =
+      req.params;
 
     if (!id) {
+
       return res.status(400).json({
         success: false,
         error: "Chatbot ID required",
@@ -27,6 +30,7 @@ export const getPublicChatbot = async (
         .single();
 
     if (error || !data) {
+
       console.error(
         "CHATBOT FETCH ERROR:",
         error
@@ -106,20 +110,16 @@ export const getPublicChatbot = async (
             "",
 
           chatBg:
-            parsedTheme.chatBg ||
-            "#161126",
+            "#ffffff",
 
           botBubble:
-            parsedTheme.botBubble ||
-            "rgba(255,255,255,0.06)",
+            "#ffffff",
 
           userBubble:
-            parsedTheme.userBubble ||
-            "#7f5af0",
+            "#000000",
 
           textColor:
-            parsedTheme.textColor ||
-            "#ffffff",
+            "#111111",
         },
 
         user_id:
@@ -239,11 +239,11 @@ export const getEmbedScript = async (
       border: "none",
       borderRadius: "28px",
       overflow: "hidden",
-      background: "#0B1120",
+      background: "transparent",
       zIndex: "999999",
       display: "none",
       boxShadow:
-        "0 20px 60px rgba(0,0,0,0.25)",
+        "0 20px 60px rgba(0,0,0,0.15)",
     }
   );
 
@@ -329,13 +329,12 @@ export const getEmbedScript = async (
       border: "none",
       cursor: "pointer",
       overflow: "hidden",
-      background:
-        "linear-gradient(135deg,#7f5af0,#5b8cff)",
+      background: "#000000",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       boxShadow:
-        "0 10px 35px rgba(127,90,240,0.45)",
+        "0 10px 35px rgba(0,0,0,0.18)",
       zIndex: "999999",
       transition:
         "transform 0.2s ease",
@@ -476,7 +475,7 @@ export const getEmbedScript = async (
 
     res.setHeader(
       "Cache-Control",
-      "public, max-age=3600"
+      "no-store"
     );
 
     return res.send(script);
