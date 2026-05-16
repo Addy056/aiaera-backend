@@ -83,7 +83,7 @@
     );
 
   iframe.src =
-    `${FRONTEND_URL}/public-chatbot/${chatbotId}`;
+  "${frontendUrl}/public-chatbot/${id}?embed=true";
 
   iframe.id =
     "aiaera-chatbot-widget";

@@ -215,7 +215,7 @@ export const getEmbedScript = async (
     );
 
   iframe.src =
-    "${frontendUrl}/public-chatbot/${id}";
+  "${frontendUrl}/public-chatbot/${id}?embed=true";
 
   iframe.id =
     "aiaera-chatbot-widget";
