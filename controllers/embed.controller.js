@@ -206,6 +206,37 @@ export const getEmbedScript = async (
 
   /*
   ========================================
+  CONTAINER
+  ========================================
+  */
+  const container =
+    document.createElement(
+      "div"
+    );
+
+  container.id =
+    "aiaera-chatbot-container";
+
+  Object.assign(
+    container.style,
+    {
+      position: "fixed",
+      bottom: "88px",
+      right: "20px",
+      width: "380px",
+      height: "640px",
+      zIndex: "999999",
+      overflow: "hidden",
+      borderRadius: "28px",
+      display: "none",
+      background: "#ffffff",
+      boxShadow:
+        "0 20px 60px rgba(0,0,0,0.15)",
+    }
+  );
+
+  /*
+  ========================================
   CREATE IFRAME
   ========================================
   */
@@ -229,20 +260,22 @@ export const getEmbedScript = async (
   Object.assign(
     iframe.style,
     {
-      position: "fixed",
-      bottom: "88px",
-      right: "20px",
-      width: "380px",
-      height: "640px",
+      width: "100%",
+      height: "100%",
       border: "none",
-      borderRadius: "28px",
       overflow: "hidden",
       background: "#ffffff",
-      zIndex: "999999",
-      display: "none",
-      boxShadow:
-        "0 20px 60px rgba(0,0,0,0.15)",
+      display: "block",
     }
+  );
+
+  /*
+  ========================================
+  APPEND IFRAME
+  ========================================
+  */
+  container.appendChild(
+    iframe
   );
 
   /*
@@ -256,36 +289,36 @@ export const getEmbedScript = async (
       window.innerWidth <= 768
     ) {
 
-      iframe.style.width =
+      container.style.width =
         "100vw";
 
-      iframe.style.height =
-        "100vh";
+      container.style.height =
+        "100dvh";
 
-      iframe.style.right =
+      container.style.right =
         "0px";
 
-      iframe.style.bottom =
+      container.style.bottom =
         "0px";
 
-      iframe.style.borderRadius =
+      container.style.borderRadius =
         "0px";
 
     } else {
 
-      iframe.style.width =
+      container.style.width =
         "380px";
 
-      iframe.style.height =
+      container.style.height =
         "640px";
 
-      iframe.style.right =
+      container.style.right =
         "20px";
 
-      iframe.style.bottom =
+      container.style.bottom =
         "88px";
 
-      iframe.style.borderRadius =
+      container.style.borderRadius =
         "28px";
     }
   }
@@ -434,12 +467,12 @@ export const getEmbedScript = async (
 
       if (isOpen) {
 
-        iframe.style.display =
+        container.style.display =
           "block";
 
       } else {
 
-        iframe.style.display =
+        container.style.display =
           "none";
       }
     }
@@ -451,7 +484,7 @@ export const getEmbedScript = async (
   ========================================
   */
   document.body.appendChild(
-    iframe
+    container
   );
 
   document.body.appendChild(
