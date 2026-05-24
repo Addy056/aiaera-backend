@@ -72,6 +72,11 @@ export const authMiddleware =
           " "
         )[1];
 
+      /*
+      ========================================
+      TOKEN CHECK
+      ========================================
+      */
       if (!token) {
 
         return res.status(401).json({
@@ -120,10 +125,84 @@ export const authMiddleware =
 
       /*
       ========================================
+      SUBSCRIPTION
+      ========================================
+      */
+      let subscription =
+        null;
+
+      let isExpired =
+        false;
+
+      try {
+
+        const {
+          data: subData,
+        } =
+          await supabase
+            .from(
+              "user_subscriptions"
+            )
+            .select("*")
+            .eq(
+              "user_id",
+              data.user.id
+            )
+            .maybeSingle();
+
+        subscription =
+          subData || null;
+
+        /*
+        ========================================
+        EXPIRATION CHECK
+        ========================================
+        */
+        if (
+          subData?.expires_at
+        ) {
+
+          isExpired =
+            new Date(
+              subData.expires_at
+            ) <
+            new Date();
+        }
+
+      } catch (subError) {
+
+        console.error(
+          "❌ SUBSCRIPTION ERROR:",
+          subError.message
+        );
+      }
+
+      /*
+      ========================================
+      ADMIN CHECK
+      ========================================
+      */
+      const ADMIN_EMAILS = [
+        "dhawaleaditya077@gmail.com",
+      ];
+
+      const isAdmin =
+        ADMIN_EMAILS.includes(
+          data.user.email
+        );
+
+      /*
+      ========================================
       ATTACH USER
       ========================================
       */
       req.user = {
+
+        /*
+        ====================================
+        USER
+        ====================================
+        */
         id:
           data.user.id,
 
@@ -136,6 +215,22 @@ export const authMiddleware =
         user_metadata:
           data.user.user_metadata ||
           {},
+
+        /*
+        ====================================
+        SUBSCRIPTION
+        ====================================
+        */
+        subscription,
+
+        isExpired,
+
+        /*
+        ====================================
+        ADMIN
+        ====================================
+        */
+        isAdmin,
       };
 
       /*

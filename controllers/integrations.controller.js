@@ -7,7 +7,10 @@ SAVE INTEGRATIONS
 ========================================
 */
 export const saveIntegration =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -45,7 +48,7 @@ export const saveIntegration =
 
         /*
         ====================================
-        GENERIC MEETING
+        BOOKING
         ====================================
         */
         provider,
@@ -53,161 +56,12 @@ export const saveIntegration =
 
         /*
         ====================================
-        OTHER
+        LOCATION
         ====================================
         */
         maps,
 
       } = req.body;
-
-      /*
-      ========================================
-      BUILD UPDATE OBJECT
-      ========================================
-      */
-      const updateData = {
-
-        user_id,
-
-        updated_at:
-          new Date().toISOString(),
-      };
-
-      /*
-      ========================================
-      WHATSAPP
-      ========================================
-      */
-      if (
-        whatsapp_token !== undefined
-      ) {
-
-        updateData.whatsapp_token =
-          whatsapp_token?.trim() ||
-          null;
-      }
-
-      if (
-        whatsapp_phone_id !== undefined
-      ) {
-
-        updateData.whatsapp_phone_id =
-          whatsapp_phone_id?.trim() ||
-          null;
-      }
-
-      if (
-        whatsapp_enabled !== undefined
-      ) {
-
-        updateData.whatsapp_enabled =
-          Boolean(
-            whatsapp_enabled
-          );
-      }
-
-      /*
-      ========================================
-      FACEBOOK
-      ========================================
-      */
-      if (
-        facebook_page_id !== undefined
-      ) {
-
-        updateData.facebook_page_id =
-          facebook_page_id?.trim() ||
-          null;
-      }
-
-      if (
-        facebook_page_token !== undefined
-      ) {
-
-        updateData.facebook_page_token =
-          facebook_page_token?.trim() ||
-          null;
-      }
-
-      if (
-        facebook_enabled !== undefined
-      ) {
-
-        updateData.facebook_enabled =
-          Boolean(
-            facebook_enabled
-          );
-      }
-
-      /*
-      ========================================
-      INSTAGRAM
-      ========================================
-      */
-      if (
-        instagram_business_id !== undefined
-      ) {
-
-        updateData.instagram_business_id =
-          instagram_business_id?.trim() ||
-          null;
-      }
-
-      if (
-        instagram_access_token !== undefined
-      ) {
-
-        updateData.instagram_access_token =
-          instagram_access_token?.trim() ||
-          null;
-      }
-
-      if (
-        instagram_enabled !== undefined
-      ) {
-
-        updateData.instagram_enabled =
-          Boolean(
-            instagram_enabled
-          );
-      }
-
-      /*
-      ========================================
-      GENERIC MEETING PROVIDER
-      ========================================
-      */
-      if (
-        provider !== undefined
-      ) {
-
-        updateData.provider =
-          provider?.trim() ||
-          "calendly";
-      }
-
-      if (
-        meeting_link !== undefined
-      ) {
-
-        updateData.meeting_link =
-          meeting_link?.trim() ||
-          null;
-      }
-
-      /*
-      ========================================
-      MAPS
-      ========================================
-      */
-      if (
-        maps !== undefined
-      ) {
-
-        updateData.maps =
-          maps?.trim() ||
-          null;
-      }
 
       /*
       ========================================
@@ -217,45 +71,105 @@ export const saveIntegration =
       const {
         data,
         error,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .upsert(
-          [updateData],
-          {
-            onConflict:
-              "user_id",
-          }
-        )
-        .select()
-        .single();
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .upsert({
 
-      if (error) {
+            user_id,
 
-        console.error(
-          "SAVE INTEGRATION ERROR:",
-          error
-        );
+            /*
+            ====================================
+            WHATSAPP
+            ====================================
+            */
+            whatsapp_token:
+              whatsapp_token ||
+              null,
 
-        return res
-          .status(400)
-          .json({
-            success: false,
+            whatsapp_phone_id:
+              whatsapp_phone_id ||
+              null,
 
-            error:
-              error.message,
-          });
-      }
+            whatsapp_enabled:
+              whatsapp_enabled ||
+              false,
 
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
-      return res.status(200).json({
+            /*
+            ====================================
+            FACEBOOK
+            ====================================
+            */
+            facebook_page_id:
+              facebook_page_id ||
+              null,
 
-        success: true,
+            facebook_page_token:
+              facebook_page_token ||
+              null,
+
+            facebook_enabled:
+              facebook_enabled ||
+              false,
+
+            /*
+            ====================================
+            INSTAGRAM
+            ====================================
+            */
+            instagram_business_id:
+              instagram_business_id ||
+              null,
+
+            instagram_access_token:
+              instagram_access_token ||
+              null,
+
+            instagram_enabled:
+              instagram_enabled ||
+              false,
+
+            /*
+            ====================================
+            BOOKING
+            ====================================
+            */
+            provider:
+              provider ||
+              "calendly",
+
+            meeting_link:
+              meeting_link ||
+              null,
+
+            /*
+            ====================================
+            LOCATION
+            ====================================
+            */
+            maps:
+              maps ||
+              null,
+
+            updated_at:
+              new Date().toISOString(),
+
+          })
+          .select()
+          .maybeSingle();
+
+      if (error)
+        throw error;
+
+      return res.json({
+
+        success:
+          true,
+
+        message:
+          "Integrations saved successfully",
 
         integrations:
           data,
@@ -264,17 +178,21 @@ export const saveIntegration =
     } catch (err) {
 
       console.error(
-        "SAVE INTEGRATION CONTROLLER ERROR:",
+        "❌ SAVE INTEGRATION ERROR:",
         err
       );
 
-      return res.status(500).json({
+      return res
+        .status(500)
+        .json({
 
-        success: false,
+          success:
+            false,
 
-        error:
-          "Internal server error",
-      });
+          error:
+            err.message ||
+            "Failed to save integrations",
+        });
     }
   };
 
@@ -284,7 +202,10 @@ GET USER INTEGRATIONS
 ========================================
 */
 export const getIntegration =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -294,113 +215,71 @@ export const getIntegration =
       const {
         data,
         error,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .select("*")
-        .eq(
-          "user_id",
-          user_id
-        )
-        .single();
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            user_id
+          )
+          .maybeSingle();
 
-      /*
-      ========================================
-      NO DATA
-      ========================================
-      */
-      if (
-        error &&
-        error.code !==
-          "PGRST116"
-      ) {
+      if (error)
+        throw error;
 
-        console.error(
-          "GET INTEGRATION ERROR:",
-          error
-        );
+      return res.json({
 
-        return res.status(400).json({
-
-          success: false,
-
-          error:
-            error.message,
-        });
-      }
-
-      /*
-      ========================================
-      EMPTY RESPONSE
-      ========================================
-      */
-      if (!data) {
-
-        return res.status(200).json({
-
-          success: true,
-
-          integrations:
-            null,
-        });
-      }
-
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
-      return res.status(200).json({
-
-        success: true,
+        success:
+          true,
 
         integrations:
-          data,
+          data || null,
       });
 
     } catch (err) {
 
       console.error(
-        "GET INTEGRATION CONTROLLER ERROR:",
+        "❌ GET INTEGRATION ERROR:",
         err
       );
 
-      return res.status(500).json({
+      return res
+        .status(500)
+        .json({
 
-        success: false,
+          success:
+            false,
 
-        error:
-          "Internal server error",
-      });
+          error:
+            err.message ||
+            "Failed to fetch integrations",
+        });
     }
   };
 
 /*
 ========================================
-GET PUBLIC INTEGRATIONS
-USED BY PUBLIC CHATBOT
+PUBLIC INTEGRATIONS
+========================================
+Used by:
+- Public chatbot
+- Widget
 ========================================
 */
 export const getPublicIntegrations =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const {
         chatbotId,
       } = req.params;
-
-      if (!chatbotId) {
-
-        return res.status(400).json({
-
-          success: false,
-
-          error:
-            "Chatbot ID required",
-        });
-      }
 
       /*
       ========================================
@@ -409,123 +288,93 @@ export const getPublicIntegrations =
       */
       const {
         data: chatbot,
-        error: chatbotError,
-      } = await supabase
-        .from("chatbots")
-        .select(
-          "user_id"
-        )
-        .eq(
-          "id",
-          chatbotId
-        )
-        .single();
+        error:
+          chatbotError,
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .select(`
+            id,
+            user_id
+          `)
+          .eq(
+            "id",
+            chatbotId
+          )
+          .maybeSingle();
 
       if (
         chatbotError ||
         !chatbot
       ) {
 
-        console.error(
-          "CHATBOT ERROR:",
-          chatbotError
-        );
+        return res
+          .status(404)
+          .json({
 
-        return res.status(404).json({
+            success:
+              false,
 
-          success: false,
-
-          error:
-            "Chatbot not found",
-        });
+            error:
+              "Chatbot not found",
+          });
       }
 
       /*
       ========================================
-      GET USER INTEGRATIONS
+      GET INTEGRATIONS
       ========================================
       */
       const {
-        data: integrations,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .select(`
-          provider,
-          meeting_link,
-          maps
-        `)
-        .eq(
-          "user_id",
-          chatbot.user_id
-        )
-        .single();
+        data,
+        error,
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .select(`
+            provider,
+            meeting_link,
+            maps
+          `)
+          .eq(
+            "user_id",
+            chatbot.user_id
+          )
+          .maybeSingle();
 
-      /*
-      ========================================
-      DEFAULT RESPONSE
-      ========================================
-      */
-      if (!integrations) {
+      if (error)
+        throw error;
 
-        return res.status(200).json({
+      return res.json({
 
-          success: true,
+        success:
+          true,
 
-          integrations: {
-
-            provider:
-              "calendly",
-
-            meeting_link:
-              "",
-
-            maps:
-              "",
-          },
-        });
-      }
-
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
-      return res.status(200).json({
-
-        success: true,
-
-        integrations: {
-
-          provider:
-            integrations.provider ||
-            "calendly",
-
-          meeting_link:
-            integrations.meeting_link ||
-            "",
-
-          maps:
-            integrations.maps ||
-            "",
-        },
+        integrations:
+          data || null,
       });
 
     } catch (err) {
 
       console.error(
-        "PUBLIC INTEGRATIONS ERROR:",
+        "❌ PUBLIC INTEGRATION ERROR:",
         err
       );
 
-      return res.status(500).json({
+      return res
+        .status(500)
+        .json({
 
-        success: false,
+          success:
+            false,
 
-        error:
-          "Failed to load integrations",
-      });
+          error:
+            "Failed to fetch public integrations",
+        });
     }
   };
 
@@ -535,7 +384,10 @@ TOGGLE AUTOMATION
 ========================================
 */
 export const toggleAutomation =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -543,42 +395,51 @@ export const toggleAutomation =
         req.user.id;
 
       const {
+
         platform,
         enabled,
+
       } = req.body;
 
       /*
       ========================================
-      PLATFORM FIELD MAP
+      VALIDATION
       ========================================
       */
-      const fieldMap = {
+      const allowedPlatforms = [
 
-        whatsapp:
-          "whatsapp_enabled",
+        "whatsapp",
 
-        facebook:
-          "facebook_enabled",
+        "facebook",
 
-        instagram:
-          "instagram_enabled",
-      };
+        "instagram",
+      ];
 
-      const field =
-        fieldMap[
+      if (
+        !allowedPlatforms.includes(
           platform
-        ];
+        )
+      ) {
 
-      if (!field) {
+        return res
+          .status(400)
+          .json({
 
-        return res.status(400).json({
+            success:
+              false,
 
-          success: false,
-
-          error:
-            "Invalid platform",
-        });
+            error:
+              "Invalid platform",
+          });
       }
+
+      /*
+      ========================================
+      FIELD
+      ========================================
+      */
+      const field =
+        `${platform}_enabled`;
 
       /*
       ========================================
@@ -586,70 +447,138 @@ export const toggleAutomation =
       ========================================
       */
       const {
+        data,
         error,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .update({
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .update({
 
-          [field]:
-            Boolean(
-              enabled
-            ),
+            [field]:
+              enabled,
 
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          "user_id",
-          user_id
-        );
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            "user_id",
+            user_id
+          )
+          .select()
+          .maybeSingle();
 
-      if (error) {
+      if (error)
+        throw error;
 
-        console.error(
-          "TOGGLE ERROR:",
-          error
-        );
+      return res.json({
 
-        return res.status(400).json({
+        success:
+          true,
 
-          success: false,
+        message:
+          `${platform} automation updated`,
 
-          error:
-            error.message,
-        });
-      }
-
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
-      return res.status(200).json({
-
-        success: true,
-
-        platform,
-
-        enabled,
+        integrations:
+          data,
       });
 
     } catch (err) {
 
       console.error(
-        "TOGGLE AUTOMATION ERROR:",
+        "❌ TOGGLE ERROR:",
         err
       );
 
-      return res.status(500).json({
+      return res
+        .status(500)
+        .json({
 
-        success: false,
+          success:
+            false,
 
-        error:
-          "Internal server error",
+          error:
+            err.message ||
+            "Failed to update automation",
+        });
+    }
+  };
+
+/*
+========================================
+AUTOMATION STATUS
+========================================
+*/
+export const getAutomationStatus =
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const user_id =
+        req.user.id;
+
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .select(`
+            whatsapp_enabled,
+            facebook_enabled,
+            instagram_enabled
+          `)
+          .eq(
+            "user_id",
+            user_id
+          )
+          .maybeSingle();
+
+      if (error)
+        throw error;
+
+      return res.json({
+
+        success:
+          true,
+
+        status:
+          data || {
+            whatsapp_enabled:
+              false,
+
+            facebook_enabled:
+              false,
+
+            instagram_enabled:
+              false,
+          },
       });
+
+    } catch (err) {
+
+      console.error(
+        "❌ STATUS ERROR:",
+        err
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message ||
+            "Failed to fetch automation status",
+        });
     }
   };
 
@@ -659,7 +588,10 @@ TEST CONNECTION
 ========================================
 */
 export const testConnection =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -667,29 +599,211 @@ export const testConnection =
         platform,
       } = req.body;
 
-      return res.status(200).json({
+      /*
+      ========================================
+      SIMPLE MOCK TEST
+      ========================================
+      */
+      return res.json({
 
-        success: true,
+        success:
+          true,
+
+        connected:
+          true,
 
         platform,
 
         message:
-          `${platform} connection test successful`,
+          `${platform} connection successful`,
       });
 
     } catch (err) {
 
       console.error(
-        "TEST CONNECTION ERROR:",
+        "❌ TEST CONNECTION ERROR:",
         err
       );
 
-      return res.status(500).json({
+      return res
+        .status(500)
+        .json({
 
-        success: false,
+          success:
+            false,
 
-        error:
-          "Connection test failed",
+          error:
+            "Connection test failed",
+        });
+    }
+  };
+
+/*
+========================================
+DELETE INTEGRATION
+========================================
+*/
+export const deleteIntegration =
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const user_id =
+        req.user.id;
+
+      const {
+        platform,
+      } = req.params;
+
+      /*
+      ========================================
+      VALIDATION
+      ========================================
+      */
+      const allowedPlatforms = [
+
+        "whatsapp",
+
+        "facebook",
+
+        "instagram",
+      ];
+
+      if (
+        !allowedPlatforms.includes(
+          platform
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Invalid platform",
+          });
+      }
+
+      /*
+      ========================================
+      RESET FIELDS
+      ========================================
+      */
+      let updateData = {};
+
+      if (
+        platform ===
+        "whatsapp"
+      ) {
+
+        updateData = {
+
+          whatsapp_token:
+            null,
+
+          whatsapp_phone_id:
+            null,
+
+          whatsapp_enabled:
+            false,
+        };
+      }
+
+      if (
+        platform ===
+        "facebook"
+      ) {
+
+        updateData = {
+
+          facebook_page_id:
+            null,
+
+          facebook_page_token:
+            null,
+
+          facebook_enabled:
+            false,
+        };
+      }
+
+      if (
+        platform ===
+        "instagram"
+      ) {
+
+        updateData = {
+
+          instagram_business_id:
+            null,
+
+          instagram_access_token:
+            null,
+
+          instagram_enabled:
+            false,
+        };
+      }
+
+      /*
+      ========================================
+      UPDATE
+      ========================================
+      */
+      const {
+        error,
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .update({
+
+            ...updateData,
+
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq(
+            "user_id",
+            user_id
+          );
+
+      if (error)
+        throw error;
+
+      return res.json({
+
+        success:
+          true,
+
+        message:
+          `${platform} integration removed`,
       });
+
+    } catch (err) {
+
+      console.error(
+        "❌ DELETE INTEGRATION ERROR:",
+        err
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message ||
+            "Failed to delete integration",
+        });
     }
   };

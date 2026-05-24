@@ -3,17 +3,248 @@ import { supabase }
 
 /*
 ========================================
-SUBSCRIPTION MIDDLEWARE
-========================================
-Checks:
-- active subscription
-- expiration date
-- valid plan
-- attaches subscription
+PLAN TYPES
 ========================================
 */
+export const PLAN_TYPES = {
 
+  FREE: "free",
+
+  BASIC: "basic",
+
+  PRO: "pro",
+};
+
+/*
+========================================
+PLAN FEATURES
+========================================
+*/
+export const PLAN_FEATURES = {
+
+  free: {
+
+    website_chatbot: true,
+
+    whatsapp: false,
+
+    facebook: false,
+
+    instagram: false,
+
+    appointments: false,
+
+    leads_export: false,
+  },
+
+  basic: {
+
+    website_chatbot: true,
+
+    whatsapp: false,
+
+    facebook: false,
+
+    instagram: false,
+
+    appointments: false,
+
+    leads_export: true,
+  },
+
+  pro: {
+
+    website_chatbot: true,
+
+    whatsapp: true,
+
+    facebook: true,
+
+    instagram: true,
+
+    appointments: true,
+
+    leads_export: true,
+  },
+};
+
+/*
+========================================
+CHECK SUBSCRIPTION
+========================================
+*/
 export const checkSubscription =
+  async (
+    user_id
+  ) => {
+
+    try {
+
+      /*
+      ========================================
+      VALIDATION
+      ========================================
+      */
+      if (!user_id) {
+
+        return {
+
+          active:
+            false,
+
+          expired:
+            true,
+
+          plan:
+            PLAN_TYPES.FREE,
+
+          features:
+            PLAN_FEATURES.free,
+
+          subscription:
+            null,
+        };
+      }
+
+      /*
+      ========================================
+      GET SUBSCRIPTION
+      ========================================
+      */
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .from(
+            "user_subscriptions"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            user_id
+          )
+          .maybeSingle();
+
+      /*
+      ========================================
+      NO SUBSCRIPTION
+      ========================================
+      */
+      if (
+        error ||
+        !data
+      ) {
+
+        return {
+
+          active:
+            false,
+
+          expired:
+            true,
+
+          plan:
+            PLAN_TYPES.FREE,
+
+          features:
+            PLAN_FEATURES.free,
+
+          subscription:
+            null,
+        };
+      }
+
+      /*
+      ========================================
+      PLAN
+      ========================================
+      */
+      const plan =
+        (
+          data.plan ||
+          PLAN_TYPES.FREE
+        ).toLowerCase();
+
+      /*
+      ========================================
+      EXPIRY CHECK
+      ========================================
+      */
+      const expired =
+        data?.expires_at
+          ? new Date(
+              data.expires_at
+            ).getTime() <
+            Date.now()
+          : false;
+
+      const active =
+        !expired;
+
+      /*
+      ========================================
+      FEATURES
+      ========================================
+      */
+      const features =
+        PLAN_FEATURES[
+          plan
+        ] ||
+        PLAN_FEATURES.free;
+
+      /*
+      ========================================
+      RETURN
+      ========================================
+      */
+      return {
+
+        active,
+
+        expired,
+
+        plan,
+
+        features,
+
+        subscription:
+          data,
+      };
+
+    } catch (err) {
+
+      console.error(
+        "❌ CHECK SUBSCRIPTION ERROR:",
+        err
+      );
+
+      return {
+
+        active:
+          false,
+
+        expired:
+          true,
+
+        plan:
+          PLAN_TYPES.FREE,
+
+        features:
+          PLAN_FEATURES.free,
+
+        subscription:
+          null,
+      };
+    }
+  };
+
+/*
+========================================
+REQUIRE SUBSCRIPTION
+========================================
+*/
+export const requireSubscription =
   async (
     req,
     res,
@@ -24,249 +255,103 @@ export const checkSubscription =
 
       /*
       ========================================
-      USER VALIDATION
+      USER CHECK
       ========================================
       */
-      if (!req.user?.id) {
-
-        return res.status(401).json({
-          success: false,
-
-          error:
-            "Unauthorized access",
-        });
-      }
-
-      const userId =
-        req.user.id;
-
-      /*
-      ========================================
-      DEV BYPASS
-      ========================================
-      */
-      const DEV_EMAIL =
-        "aiaera056@gmail.com";
-
       if (
-        req.user.email ===
-        DEV_EMAIL
+        !req.user?.id
       ) {
 
-        console.log(
-          "✅ DEV ACCOUNT BYPASS"
-        );
+        return res
+          .status(401)
+          .json({
 
-        req.subscription = {
-          id: "dev-bypass",
+            success:
+              false,
 
-          plan: "pro",
-
-          expires_at:
-            "2099-12-31",
-
-          active: true,
-        };
-
-        return next();
+            error:
+              "Unauthorized",
+          });
       }
 
       /*
       ========================================
-      GET SUBSCRIPTION
+      ADMIN BYPASS
       ========================================
       */
-      const {
-        data: subscription,
-        error,
-      } = await supabase
-        .from(
-          "user_subscriptions"
-        )
-        .select("*")
-        .eq(
-          "user_id",
-          userId
-        )
-        .maybeSingle();
+      const ADMIN_EMAILS = [
 
-      /*
-      ========================================
-      DATABASE ERROR
-      ========================================
-      */
-      if (error) {
-
-        console.error(
-          "❌ SUBSCRIPTION FETCH ERROR:",
-          error
-        );
-
-        return res.status(500).json({
-          success: false,
-
-          error:
-            "Subscription validation failed",
-        });
-      }
-
-      /*
-      ========================================
-      NO SUBSCRIPTION
-      ========================================
-      */
-      if (!subscription) {
-
-        return res.status(403).json({
-          success: false,
-
-          error:
-            "No active subscription found",
-        });
-      }
-
-      /*
-      ========================================
-      VALIDATE PLAN
-      ========================================
-      */
-      const validPlans = [
-        "free",
-        "basic",
-        "pro",
+        "dhawaleaditya077@gmail.com",
       ];
 
-      const userPlan =
-        subscription.plan
-          ?.toLowerCase();
-
       if (
-        !validPlans.includes(
-          userPlan
+        ADMIN_EMAILS.includes(
+          req.user.email
         )
       ) {
 
-        console.error(
-          "❌ INVALID PLAN:",
-          subscription.plan
-        );
+        req.plan =
+          PLAN_TYPES.PRO;
 
-        return res.status(403).json({
-          success: false,
-
-          error:
-            "Invalid subscription plan",
-        });
-      }
-
-      /*
-      ========================================
-      FREE PLAN
-      ========================================
-      */
-      if (
-        userPlan === "free"
-      ) {
-
-        req.subscription = {
-          id:
-            subscription.id,
-
-          plan:
-            "free",
-
-          expires_at:
-            null,
-
-          active:
-            true,
-        };
+        req.features =
+          PLAN_FEATURES.pro;
 
         return next();
       }
 
       /*
       ========================================
-      EXPIRATION CHECK
+      CHECK SUBSCRIPTION
       ========================================
       */
-      if (
-        !subscription.expires_at
-      ) {
-
-        return res.status(403).json({
-          success: false,
-
-          error:
-            "Subscription expired",
-        });
-      }
-
-      const currentDate =
-        new Date();
-
-      const expiryDate =
-        new Date(
-          subscription.expires_at
+      const result =
+        await checkSubscription(
+          req.user.id
         );
 
       /*
       ========================================
-      INVALID DATE
+      EXPIRED
       ========================================
       */
       if (
-        isNaN(
-          expiryDate.getTime()
-        )
+        !result.active
       ) {
 
-        return res.status(403).json({
-          success: false,
+        return res
+          .status(403)
+          .json({
 
-          error:
-            "Invalid subscription date",
-        });
+            success:
+              false,
+
+            expired:
+              true,
+
+            error:
+              "Subscription expired",
+
+            plan:
+              result.plan,
+
+            subscription:
+              result.subscription,
+          });
       }
 
       /*
       ========================================
-      EXPIRED SUBSCRIPTION
+      ATTACH
       ========================================
       */
-      if (
-        expiryDate <=
-        currentDate
-      ) {
+      req.subscription =
+        result.subscription;
 
-        return res.status(403).json({
-          success: false,
+      req.plan =
+        result.plan;
 
-          error:
-            "Subscription expired",
-
-          expired: true,
-        });
-      }
-
-      /*
-      ========================================
-      ATTACH SUBSCRIPTION
-      ========================================
-      */
-      req.subscription = {
-        id:
-          subscription.id,
-
-        plan:
-          userPlan,
-
-        expires_at:
-          subscription.expires_at,
-
-        active:
-          true,
-      };
+      req.features =
+        result.features;
 
       /*
       ========================================
@@ -279,14 +364,168 @@ export const checkSubscription =
 
       console.error(
         "❌ SUBSCRIPTION MIDDLEWARE ERROR:",
-        err.message || err
+        err
       );
 
-      return res.status(500).json({
-        success: false,
+      return res
+        .status(500)
+        .json({
 
-        error:
-          "Server error during subscription validation",
-      });
+          success:
+            false,
+
+          error:
+            "Subscription validation failed",
+        });
     }
+  };
+
+/*
+========================================
+FEATURE ACCESS MIDDLEWARE
+========================================
+Usage:
+requireFeatureAccess("whatsapp")
+========================================
+*/
+export const requireFeatureAccess =
+  (
+    featureName
+  ) => {
+
+    return async (
+      req,
+      res,
+      next
+    ) => {
+
+      try {
+
+        /*
+        ========================================
+        USER CHECK
+        ========================================
+        */
+        if (
+          !req.user?.id
+        ) {
+
+          return res
+            .status(401)
+            .json({
+
+              success:
+                false,
+
+              error:
+                "Unauthorized",
+            });
+        }
+
+        /*
+        ========================================
+        CHECK SUBSCRIPTION
+        ========================================
+        */
+        const result =
+          await checkSubscription(
+            req.user.id
+          );
+
+        /*
+        ========================================
+        EXPIRED
+        ========================================
+        */
+        if (
+          !result.active
+        ) {
+
+          return res
+            .status(403)
+            .json({
+
+              success:
+                false,
+
+              expired:
+                true,
+
+              error:
+                "Subscription expired",
+            });
+        }
+
+        /*
+        ========================================
+        FEATURE ACCESS
+        ========================================
+        */
+        const hasAccess =
+          result.features?.[
+            featureName
+          ];
+
+        if (
+          !hasAccess
+        ) {
+
+          return res
+            .status(403)
+            .json({
+
+              success:
+                false,
+
+              upgrade_required:
+                true,
+
+              current_plan:
+                result.plan,
+
+              error:
+                `Your current plan does not include ${featureName}`,
+            });
+        }
+
+        /*
+        ========================================
+        ATTACH
+        ========================================
+        */
+        req.subscription =
+          result.subscription;
+
+        req.plan =
+          result.plan;
+
+        req.features =
+          result.features;
+
+        /*
+        ========================================
+        CONTINUE
+        ========================================
+        */
+        next();
+
+      } catch (err) {
+
+        console.error(
+          "❌ FEATURE ACCESS ERROR:",
+          err
+        );
+
+        return res
+          .status(500)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Feature validation failed",
+          });
+      }
+    };
   };

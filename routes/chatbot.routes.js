@@ -8,6 +8,7 @@ import {
   updateChatbot,
   deleteChatbot,
   getUserChatbots,
+  getPublicChatbot,
 } from "../controllers/chatbot.controller.js";
 
 import {
@@ -25,39 +26,115 @@ const router =
 ========================================
 PUBLIC ROUTES
 ========================================
-These routes are accessible
-without authentication.
+Accessible without auth
 ========================================
 */
 
 /*
 ========================================
-PUBLIC CHAT ENDPOINT
+PUBLIC CHAT
 ========================================
-
-Used By:
-1. Builder Preview
+Used by:
+1. Website Widget
 2. Public Chatbot Page
-3. Website Widget
+3. Builder Preview
 4. WhatsApp Automation
 5. Facebook Automation
 6. Instagram Automation
-
-Supports:
-- AI conversations
-- lead collection
-- appointment booking
-- maps/location sharing
-- generic meeting providers
-
-No auth required because
-website visitors must access
-the chatbot publicly.
 ========================================
 */
 router.post(
   "/chat",
   chatWithBot
+);
+
+/*
+========================================
+PUBLIC CHATBOT CONFIG
+========================================
+Used by:
+- Public chatbot page
+- Embed widget
+========================================
+*/
+router.get(
+  "/public/:id",
+  getPublicChatbot
+);
+
+/*
+========================================
+HEALTH CHECK
+========================================
+*/
+router.get(
+  "/health",
+  (req, res) => {
+
+    return res.status(200).json({
+
+      success: true,
+
+      message:
+        "Chatbot routes working ✅",
+
+      timestamp:
+        new Date(),
+    });
+  }
+);
+
+/*
+========================================
+DEBUG ROUTES
+========================================
+*/
+router.get(
+  "/debug/routes",
+  (req, res) => {
+
+    return res.status(200).json({
+
+      success: true,
+
+      routes: {
+
+        /*
+        ====================================
+        PUBLIC
+        ====================================
+        */
+        publicChat:
+          "POST /api/chatbot/chat",
+
+        publicConfig:
+          "GET /api/chatbot/public/:id",
+
+        /*
+        ====================================
+        PROTECTED
+        ====================================
+        */
+        create:
+          "POST /api/chatbot/create",
+
+        getAll:
+          "GET /api/chatbot/user/all",
+
+        getSingle:
+          "GET /api/chatbot/:id",
+
+        update:
+          "PUT /api/chatbot/:id",
+
+        delete:
+          "DELETE /api/chatbot/:id",
+
+        scrape:
+          "POST /api/chatbot/scrape",
+      },
+    });
+  }
 );
 
 /*
@@ -144,65 +221,6 @@ router.post(
   authMiddleware,
   checkSubscription,
   scrapeWebsiteTraining
-);
-
-/*
-========================================
-HEALTH CHECK
-========================================
-*/
-router.get(
-  "/health",
-  (req, res) => {
-
-    return res.status(200).json({
-
-      success: true,
-
-      message:
-        "Chatbot routes working ✅",
-    });
-  }
-);
-
-/*
-========================================
-DEBUG ROUTES
-========================================
-*/
-router.get(
-  "/debug/routes",
-  (req, res) => {
-
-    return res.status(200).json({
-
-      success: true,
-
-      routes: {
-
-        publicChat:
-          "POST /api/chatbot/chat",
-
-        create:
-          "POST /api/chatbot/create",
-
-        getAll:
-          "GET /api/chatbot/user/all",
-
-        getSingle:
-          "GET /api/chatbot/:id",
-
-        update:
-          "PUT /api/chatbot/:id",
-
-        delete:
-          "DELETE /api/chatbot/:id",
-
-        scrape:
-          "POST /api/chatbot/scrape",
-      },
-    });
-  }
 );
 
 export default router;

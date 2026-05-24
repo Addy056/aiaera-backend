@@ -22,7 +22,15 @@ export const getPublicChatbot = async (
       });
     }
 
-    const { data, error } =
+    /*
+    ========================================
+    FETCH CHATBOT
+    ========================================
+    */
+    const {
+      data,
+      error,
+    } =
       await supabase
         .from("chatbots")
         .select("*")
@@ -40,6 +48,47 @@ export const getPublicChatbot = async (
         success: false,
         error: "Chatbot not found",
       });
+    }
+
+    /*
+    ========================================
+    CHECK SUBSCRIPTION
+    ========================================
+    */
+    const {
+      data: subscription,
+    } =
+      await supabase
+        .from(
+          "user_subscriptions"
+        )
+        .select("*")
+        .eq(
+          "user_id",
+          data.user_id
+        )
+        .single();
+
+    let subscriptionExpired =
+      false;
+
+    if (
+      subscription?.expires_at
+    ) {
+
+      const now =
+        new Date();
+
+      const expiry =
+        new Date(
+          subscription.expires_at
+        );
+
+      if (expiry < now) {
+
+        subscriptionExpired =
+          true;
+      }
     }
 
     /*
@@ -85,6 +134,9 @@ export const getPublicChatbot = async (
     return res.status(200).json({
       success: true,
 
+      subscription_expired:
+        subscriptionExpired,
+
       chatbot: {
         id: data.id,
 
@@ -109,17 +161,26 @@ export const getPublicChatbot = async (
             parsedTheme.logo ||
             "",
 
+          /*
+          ========================================
+          DEFAULT BLACK & WHITE THEME
+          ========================================
+          */
           chatBg:
-            "#ffffff",
+            parsedTheme.chatBg ||
+            "#0B1120",
 
           botBubble:
-            "#ffffff",
+            parsedTheme.botBubble ||
+            "#111827",
 
           userBubble:
-            "#000000",
+            parsedTheme.userBubble ||
+            "#7f5af0",
 
           textColor:
-            "#111111",
+            parsedTheme.textColor ||
+            "#ffffff",
         },
 
         user_id:
@@ -224,14 +285,18 @@ export const getEmbedScript = async (
       bottom: "88px",
       right: "20px",
       width: "380px",
-      height: "640px",
+      height: "700px",
+      maxWidth: "calc(100vw - 20px)",
+      maxHeight: "calc(100dvh - 100px)",
       zIndex: "999999",
       overflow: "hidden",
       borderRadius: "28px",
       display: "none",
-      background: "#ffffff",
+      background: "#0B1120",
       boxShadow:
-        "0 20px 60px rgba(0,0,0,0.15)",
+        "0 20px 60px rgba(0,0,0,0.35)",
+      transition:
+        "all 0.25s ease",
     }
   );
 
@@ -264,7 +329,7 @@ export const getEmbedScript = async (
       height: "100%",
       border: "none",
       overflow: "hidden",
-      background: "#ffffff",
+      background: "#0B1120",
       display: "block",
     }
   );
@@ -310,7 +375,7 @@ export const getEmbedScript = async (
         "380px";
 
       container.style.height =
-        "640px";
+        "700px";
 
       container.style.right =
         "20px";

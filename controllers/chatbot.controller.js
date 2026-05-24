@@ -1,14 +1,25 @@
 import Groq from "groq-sdk";
 
-import { supabase } from "../config/supabaseClient.js";
+import { supabase }
+  from "../config/supabaseClient.js";
 
-import { scrapeWebsite } from "../utils/scraper.js";
+import { scrapeWebsite }
+  from "../utils/scraper.js";
 
-import { extractLeadData } from "../utils/leadExtractor.js";
+import { extractLeadData }
+  from "../utils/leadExtractor.js";
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+/*
+========================================
+GROQ
+========================================
+*/
+const groq =
+  new Groq({
+
+    apiKey:
+      process.env.GROQ_API_KEY,
+  });
 
 /*
 ========================================
@@ -16,33 +27,59 @@ CREATE CHATBOT
 ========================================
 */
 export const createChatbot =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const {
+
         name,
+
         business_info,
+
         website_url,
+
         theme,
+
       } = req.body;
 
+      /*
+      ========================================
+      VALIDATION
+      ========================================
+      */
       if (!name) {
 
-        return res.status(400).json({
-          success: false,
-          error:
-            "Chatbot name is required",
-        });
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Chatbot name is required",
+          });
       }
 
+      /*
+      ========================================
+      CREATE
+      ========================================
+      */
       const {
         data,
         error,
-      } = await supabase
-        .from("chatbots")
-        .insert([
-          {
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .insert([{
+
             user_id:
               req.user.id,
 
@@ -53,34 +90,46 @@ export const createChatbot =
 
             website_url,
 
-            theme,
-          },
-        ])
-        .select()
-        .maybeSingle();
+            theme:
+              theme ||
+              {},
 
-      if (error) {
+          }])
+          .select()
+          .maybeSingle();
+
+      if (error)
         throw error;
-      }
 
-      return res.status(201).json({
-        success: true,
-        chatbot: data,
-      });
+      return res
+        .status(201)
+        .json({
+
+          success:
+            true,
+
+          chatbot:
+            data,
+        });
 
     } catch (err) {
 
       console.error(
-        "CREATE CHATBOT ERROR:",
+        "❌ CREATE CHATBOT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message ||
-          "Failed to create chatbot",
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message ||
+            "Failed to create chatbot",
+        });
     }
   };
 
@@ -90,33 +139,42 @@ GET USER CHATBOTS
 ========================================
 */
 export const getUserChatbots =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const {
         data,
         error,
-      } = await supabase
-        .from("chatbots")
-        .select("*")
-        .eq(
-          "user_id",
-          req.user.id
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        );
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            req.user.id
+          )
+          .order(
+            "created_at",
+            {
+              ascending:
+                false,
+            }
+          );
 
-      if (error) {
+      if (error)
         throw error;
-      }
 
       return res.json({
-        success: true,
+
+        success:
+          true,
+
         chatbots:
           data || [],
       });
@@ -124,15 +182,165 @@ export const getUserChatbots =
     } catch (err) {
 
       console.error(
-        "GET USER CHATBOTS ERROR:",
+        "❌ GET CHATBOTS ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message,
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+            error:
+              err.message,
+        });
+    }
+  };
+
+/*
+========================================
+GET PUBLIC CHATBOT
+========================================
+*/
+export const getPublicChatbot =
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const { id } =
+        req.params;
+
+      /*
+      ========================================
+      GET CHATBOT
+      ========================================
+      */
+      const {
+        data: chatbot,
+        error,
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .select("*")
+          .eq(
+            "id",
+            id
+          )
+          .maybeSingle();
+
+      if (
+        error ||
+        !chatbot
+      ) {
+
+        return res
+          .status(404)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Chatbot not found",
+          });
+      }
+
+      /*
+      ========================================
+      CHECK SUBSCRIPTION
+      ========================================
+      */
+      const {
+        data:
+          subscription,
+      } =
+        await supabase
+          .from(
+            "user_subscriptions"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            chatbot.user_id
+          )
+          .maybeSingle();
+
+      let subscription_expired =
+        false;
+
+      if (
+        subscription?.expires_at
+      ) {
+
+        subscription_expired =
+          new Date(
+            subscription.expires_at
+          ) <
+          new Date();
+      }
+
+      /*
+      ========================================
+      GET INTEGRATIONS
+      ========================================
+      */
+      const {
+        data:
+          integrations,
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .select(`
+            provider,
+            meeting_link,
+            maps
+          `)
+          .eq(
+            "user_id",
+            chatbot.user_id
+          )
+          .maybeSingle();
+
+      return res.json({
+
+        success:
+          true,
+
+        chatbot,
+
+        integrations:
+          integrations ||
+          null,
+
+        subscription_expired,
       });
+
+    } catch (err) {
+
+      console.error(
+        "❌ PUBLIC CHATBOT ERROR:",
+        err
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "Failed to fetch chatbot",
+        });
     }
   };
 
@@ -142,7 +350,10 @@ GET CHATBOT CONFIG
 ========================================
 */
 export const getChatbotConfig =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -152,48 +363,65 @@ export const getChatbotConfig =
       const {
         data,
         error,
-      } = await supabase
-        .from("chatbots")
-        .select("*")
-        .eq(
-          "id",
-          id
-        )
-        .eq(
-          "user_id",
-          req.user.id
-        )
-        .maybeSingle();
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .select("*")
+          .eq(
+            "id",
+            id
+          )
+          .eq(
+            "user_id",
+            req.user.id
+          )
+          .maybeSingle();
 
       if (
         error ||
         !data
       ) {
 
-        return res.status(404).json({
-          success: false,
-          error:
-            "Chatbot not found",
-        });
+        return res
+          .status(404)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Chatbot not found",
+          });
       }
 
       return res.json({
-        success: true,
-        chatbot: data,
+
+        success:
+          true,
+
+        chatbot:
+          data,
       });
 
     } catch (err) {
 
       console.error(
-        "GET CHATBOT ERROR:",
+        "❌ GET CHATBOT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message,
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message,
+        });
     }
   };
 
@@ -203,7 +431,10 @@ UPDATE CHATBOT
 ========================================
 */
 export const updateChatbot =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
@@ -216,41 +447,54 @@ export const updateChatbot =
       const {
         data,
         error,
-      } = await supabase
-        .from("chatbots")
-        .update(updates)
-        .eq(
-          "id",
-          id
-        )
-        .eq(
-          "user_id",
-          req.user.id
-        )
-        .select()
-        .maybeSingle();
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .update(
+            updates
+          )
+          .eq(
+            "id",
+            id
+          )
+          .eq(
+            "user_id",
+            req.user.id
+          )
+          .select()
+          .maybeSingle();
 
-      if (error) {
+      if (error)
         throw error;
-      }
 
       return res.json({
-        success: true,
-        chatbot: data,
+
+        success:
+          true,
+
+        chatbot:
+          data,
       });
 
     } catch (err) {
 
       console.error(
-        "UPDATE CHATBOT ERROR:",
+        "❌ UPDATE CHATBOT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message,
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message,
+        });
     }
   };
 
@@ -260,13 +504,21 @@ DELETE CHATBOT
 ========================================
 */
 export const deleteChatbot =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const { id } =
         req.params;
 
+      /*
+      ========================================
+      DELETE RELATED DATA
+      ========================================
+      */
       await supabase
         .from(
           "chatbot_file_data"
@@ -305,6 +557,11 @@ export const deleteChatbot =
           id
         );
 
+      /*
+      ========================================
+      DELETE CHATBOT
+      ========================================
+      */
       const { error } =
         await supabase
           .from(
@@ -320,12 +577,14 @@ export const deleteChatbot =
             req.user.id
           );
 
-      if (error) {
+      if (error)
         throw error;
-      }
 
       return res.json({
-        success: true,
+
+        success:
+          true,
+
         message:
           "Chatbot deleted successfully",
       });
@@ -333,15 +592,20 @@ export const deleteChatbot =
     } catch (err) {
 
       console.error(
-        "DELETE CHATBOT ERROR:",
+        "❌ DELETE CHATBOT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message,
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message,
+        });
     }
   };
 
@@ -351,14 +615,31 @@ CHAT WITH BOT
 ========================================
 */
 export const chatWithBot =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const {
+
         message,
+
+        chatbotId,
+
         chatbot_id,
+
       } = req.body;
+
+      /*
+      ========================================
+      SUPPORT BOTH KEYS
+      ========================================
+      */
+      const finalChatbotId =
+        chatbotId ||
+        chatbot_id;
 
       /*
       ========================================
@@ -367,34 +648,19 @@ export const chatWithBot =
       */
       if (
         !message ||
-        !chatbot_id
+        !finalChatbotId
       ) {
 
-        return res.status(400).json({
-          success: false,
-          reply:
-            "Invalid request",
-        });
-      }
+        return res
+          .status(400)
+          .json({
 
-      /*
-      ========================================
-      CHECK GROQ KEY
-      ========================================
-      */
-      if (
-        !process.env.GROQ_API_KEY
-      ) {
+            success:
+              false,
 
-        console.error(
-          "GROQ API KEY MISSING"
-        );
-
-        return res.status(500).json({
-          success: false,
-          reply:
-            "AI service unavailable",
-        });
+            error:
+              "Message and chatbot ID are required",
+          });
       }
 
       /*
@@ -404,30 +670,72 @@ export const chatWithBot =
       */
       const {
         data: chatbot,
-        error: chatbotError,
-      } = await supabase
-        .from("chatbots")
-        .select("*")
-        .eq(
-          "id",
-          chatbot_id
-        )
-        .maybeSingle();
+        error:
+          chatbotError,
+      } =
+        await supabase
+          .from(
+            "chatbots"
+          )
+          .select("*")
+          .eq(
+            "id",
+            finalChatbotId
+          )
+          .maybeSingle();
 
       if (
         chatbotError ||
         !chatbot
       ) {
 
-        console.error(
-          "CHATBOT FETCH ERROR:",
-          chatbotError
-        );
+        return res
+          .status(404)
+          .json({
 
-        return res.status(404).json({
-          success: false,
-          reply:
-            "Chatbot not found",
+            success:
+              false,
+
+            error:
+              "Chatbot not found",
+          });
+      }
+
+      /*
+      ========================================
+      CHECK SUBSCRIPTION
+      ========================================
+      */
+      const {
+        data:
+          subscription,
+      } =
+        await supabase
+          .from(
+            "user_subscriptions"
+          )
+          .select("*")
+          .eq(
+            "user_id",
+            chatbot.user_id
+          )
+          .maybeSingle();
+
+      if (
+        subscription?.expires_at &&
+        new Date(
+          subscription.expires_at
+        ) <
+          new Date()
+      ) {
+
+        return res.json({
+
+          success:
+            false,
+
+          error:
+            "This chatbot subscription has expired.",
         });
       }
 
@@ -437,19 +745,23 @@ export const chatWithBot =
       ========================================
       */
       const {
-  data: integrations,
-} = await supabase
-  .from("user_integrations")
-  .select(`
-    provider,
-    meeting_link,
-    maps
-  `)
-  .eq(
-    "user_id",
-    chatbot.user_id
-  )
-  .maybeSingle();
+        data:
+          integrations,
+      } =
+        await supabase
+          .from(
+            "user_integrations"
+          )
+          .select(`
+            provider,
+            meeting_link,
+            maps
+          `)
+          .eq(
+            "user_id",
+            chatbot.user_id
+          )
+          .maybeSingle();
 
       /*
       ========================================
@@ -457,32 +769,38 @@ export const chatWithBot =
       ========================================
       */
       const {
-        data: trainingData,
-      } = await supabase
-        .from(
-          "chatbot_file_data"
-        )
-        .select("content")
-        .eq(
-          "chatbot_id",
-          chatbot_id
-        );
+        data:
+          trainingData,
+      } =
+        await supabase
+          .from(
+            "chatbot_file_data"
+          )
+          .select(
+            "content"
+          )
+          .eq(
+            "chatbot_id",
+            finalChatbotId
+          );
 
-      /*
-      ========================================
-      FORMAT TRAINING DATA
-      ========================================
-      */
       const trainingContent =
         (
-          trainingData || []
+          trainingData ||
+          []
         )
           .map(
-            (item) =>
-              item.content || ""
+            (
+              item
+            ) =>
+              item.content ||
+              ""
           )
           .join("\n\n")
-          .slice(0, 12000);
+          .slice(
+            0,
+            12000
+          );
 
       /*
       ========================================
@@ -494,63 +812,65 @@ export const chatWithBot =
 
       /*
       ========================================
-      APPOINTMENT DETECTION
+      APPOINTMENT
       ========================================
       */
       if (
-  lowerMessage.includes("appointment") ||
-  lowerMessage.includes("meeting") ||
-  lowerMessage.includes("book") ||
-  lowerMessage.includes("schedule") ||
-  lowerMessage.includes("demo") ||
-  lowerMessage.includes("consultation") ||
-  lowerMessage.includes("call") ||
-  lowerMessage.includes("zoom") ||
-  lowerMessage.includes("consult")
-) {
+
+        lowerMessage.includes(
+          "appointment"
+        ) ||
+
+        lowerMessage.includes(
+          "book"
+        ) ||
+
+        lowerMessage.includes(
+          "meeting"
+        ) ||
+
+        lowerMessage.includes(
+          "demo"
+        )
+
+      ) {
 
         if (
-  integrations?.meeting_link &&
-  integrations.meeting_link.trim() !== ""
-) {
-
-          const providerName =
-            integrations.provider === "zoom"
-              ? "Zoom"
-              : integrations.provider === "teams"
-              ? "Microsoft Teams"
-              : integrations.provider === "meet"
-              ? "Google Meet"
-              : integrations.provider === "custom"
-              ? "Meeting"
-              : "Calendly";
+          integrations?.meeting_link
+        ) {
 
           return res.json({
-            success: true,
+
+            success:
+              true,
+
             reply:
-`📅 You can book an appointment using ${providerName}:
+`📅 You can book an appointment here:
 
 ${integrations.meeting_link}`,
           });
         }
-
-        return res.json({
-          success: true,
-          reply:
-            "Booking is currently unavailable.",
-        });
       }
 
       /*
       ========================================
-      LOCATION DETECTION
+      LOCATION
       ========================================
       */
       if (
-        lowerMessage.includes("office") ||
-        lowerMessage.includes("location") ||
-        lowerMessage.includes("visit") ||
-        lowerMessage.includes("address")
+
+        lowerMessage.includes(
+          "location"
+        ) ||
+
+        lowerMessage.includes(
+          "office"
+        ) ||
+
+        lowerMessage.includes(
+          "address"
+        )
+
       ) {
 
         if (
@@ -558,19 +878,16 @@ ${integrations.meeting_link}`,
         ) {
 
           return res.json({
-            success: true,
+
+            success:
+              true,
+
             reply:
-`📍 Visit our office here:
+`📍 Visit us here:
 
 ${integrations.maps}`,
           });
         }
-
-        return res.json({
-          success: true,
-          reply:
-            "Office location is currently unavailable.",
-        });
       }
 
       /*
@@ -579,172 +896,84 @@ ${integrations.maps}`,
       ========================================
       */
       const systemPrompt = `
-You are a real human customer support and sales representative for ${
-  chatbot.bot_name ||
-  "the business"
-}.
+You are a professional human customer support and sales representative.
 
-Your job is to:
-- help visitors naturally
-- answer questions professionally
-- guide users toward booking, purchasing, or contacting the business
-- collect leads naturally during conversation
+IMPORTANT LANGUAGE RULES:
+- Detect the language of the user's message automatically
+- ALWAYS reply in the SAME language as the user
+- If the user switches language, switch automatically
+- Never mention language detection
+- Never say you are AI
+- Sound natural and human
 
-BUSINESS INFO:
-${
-  chatbot.business_info ||
-  "Not provided"
-}
+BUSINESS:
+${chatbot.business_info || "Not provided"}
 
 WEBSITE:
-${
-  chatbot.website_url ||
-  "Not provided"
-}
+${chatbot.website_url || "Not provided"}
 
-TRAINING DATA:
-${
-  trainingContent ||
-  "No training data"
-}
+TRAINING:
+${trainingContent || "No training data"}
 
-BOOKING PROVIDER:
-${
-  integrations?.provider ||
-  "Not configured"
-}
-
-BOOKING LINK:
-${
-  integrations?.meeting_link ||
-  "Not configured"
-}
-
-IMPORTANT BEHAVIOR RULES:
-
-- NEVER say you are an AI
-- NEVER say you are a bot
-- Talk like a real human support representative
-- Keep replies conversational and natural
-- Keep responses concise unless more detail is needed
-- Use uploaded training data whenever relevant
-- Sound friendly and professional
-- If unsure, politely say you don't know
-
-LEAD COLLECTION RULES:
-
-When the visitor shows interest in:
-- pricing
-- services
-- consultation
-- appointments
-- business inquiries
-- purchases
-- demos
-- support
-
-OR after a few meaningful messages,
-naturally ask for:
-- name
-- email
-- phone number
-
-IMPORTANT:
-- Ask naturally
-- Do not sound robotic
-- Do not ask repeatedly if already provided
-- Avoid aggressive sales tone
-- Make the conversation feel human
-
-APPOINTMENTS:
-If users want to book or schedule,
-share this booking link naturally:
-
-${
-  integrations?.meeting_link ||
-  "Booking unavailable"
-}
-
-LOCATION:
-If users ask for office location,
-share this map link naturally:
-
-${
-  integrations?.maps ||
-  "Location unavailable"
-}
+BEHAVIOR RULES:
+- Be conversational
+- Be professional
+- Keep replies concise
+- Use training data accurately
+- Avoid hallucinations
+- Collect leads naturally
+- Encourage appointments naturally
+- If information is unavailable, politely say so
 `;
 
       /*
       ========================================
-      GENERATE RESPONSE
+      GROQ RESPONSE
       ========================================
       */
-      let completion;
+      const completion =
+        await groq.chat.completions.create({
 
-      try {
+          model:
+            "llama-3.1-8b-instant",
 
-        completion =
-          await groq.chat.completions.create(
+          temperature:
+            0.7,
+
+          max_tokens:
+            500,
+
+          messages: [
+
             {
-              model:
-                "llama-3.1-8b-instant",
+              role:
+                "system",
 
-              temperature:
-                0.7,
+              content:
+                systemPrompt,
+            },
 
-              max_tokens:
-                500,
+            {
+              role:
+                "user",
 
-              messages: [
-                {
-                  role:
-                    "system",
-
-                  content:
-                    systemPrompt,
-                },
-                {
-                  role:
-                    "user",
-
-                  content:
-                    message,
-                },
-              ],
-            }
-          );
-
-      } catch (groqError) {
-
-        console.error(
-          "GROQ ERROR:",
-          groqError
-        );
-
-        return res.status(500).json({
-          success: false,
-          reply:
-            "AI service temporarily unavailable",
+              content:
+                message,
+            },
+          ],
         });
-      }
 
-      /*
-      ========================================
-      SAFE RESPONSE
-      ========================================
-      */
       const reply =
         completion
           ?.choices?.[0]
           ?.message
           ?.content
           ?.trim() ||
-        "I'm here to help you.";
+        "I'm here to help.";
 
       /*
       ========================================
-      EXTRACT LEADS
+      LEAD EXTRACTION
       ========================================
       */
       try {
@@ -759,31 +988,35 @@ ${
         ) {
 
           await supabase
-            .from("leads")
-            .insert([
-              {
-                chatbot_id,
+            .from(
+              "leads"
+            )
+            .insert([{
 
-                user_id:
-                  chatbot.user_id,
+              chatbot_id:
+                finalChatbotId,
 
-                name:
-                  leadData.name ||
-                  "Unknown",
+              user_id:
+                chatbot.user_id,
 
-                email:
-                  leadData.email ||
-                  null,
+              name:
+                leadData.name ||
+                "Unknown",
 
-                message,
-              },
-            ]);
+              email:
+                leadData.email ||
+                null,
+
+              message,
+            }]);
         }
 
-      } catch (leadError) {
+      } catch (
+        leadError
+      ) {
 
         console.error(
-          "LEAD EXTRACTION ERROR:",
+          "❌ LEAD ERROR:",
           leadError
         );
       }
@@ -794,22 +1027,30 @@ ${
       ========================================
       */
       return res.json({
-        success: true,
+
+        success:
+          true,
+
         reply,
       });
 
     } catch (err) {
 
       console.error(
-        "CHAT ERROR:",
+        "❌ CHAT ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        reply:
-          "Server error",
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            "AI service unavailable",
+        });
     }
   };
 
@@ -819,13 +1060,19 @@ SCRAPE WEBSITE TRAINING
 ========================================
 */
 export const scrapeWebsiteTraining =
-  async (req, res) => {
+  async (
+    req,
+    res
+  ) => {
 
     try {
 
       const {
+
         chatbot_id,
+
         website_url,
+
       } = req.body;
 
       if (
@@ -833,40 +1080,56 @@ export const scrapeWebsiteTraining =
         !website_url
       ) {
 
-        return res.status(400).json({
-          success: false,
-          error:
-            "Missing chatbot_id or website_url",
-        });
+        return res
+          .status(400)
+          .json({
+
+            success:
+              false,
+
+            error:
+              "Missing chatbot_id or website_url",
+          });
       }
 
+      /*
+      ========================================
+      SCRAPE
+      ========================================
+      */
       const content =
         await scrapeWebsite(
           website_url
         );
 
+      /*
+      ========================================
+      SAVE DATA
+      ========================================
+      */
       const { error } =
         await supabase
           .from(
             "chatbot_file_data"
           )
-          .insert([
-            {
-              chatbot_id,
+          .insert([{
 
-              user_id:
-                req.user.id,
+            chatbot_id,
 
-              content,
-            },
-          ]);
+            user_id:
+              req.user.id,
 
-      if (error) {
+            content,
+          }]);
+
+      if (error)
         throw error;
-      }
 
       return res.json({
-        success: true,
+
+        success:
+          true,
+
         message:
           "Website trained successfully",
       });
@@ -874,15 +1137,20 @@ export const scrapeWebsiteTraining =
     } catch (err) {
 
       console.error(
-        "SCRAPER ERROR:",
+        "❌ SCRAPER ERROR:",
         err
       );
 
-      return res.status(500).json({
-        success: false,
-        error:
-          err.message ||
-          "Failed to scrape website",
-      });
+      return res
+        .status(500)
+        .json({
+
+          success:
+            false,
+
+          error:
+            err.message ||
+            "Failed to scrape website",
+        });
     }
   };
