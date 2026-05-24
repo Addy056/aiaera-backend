@@ -9,6 +9,7 @@ export const getPublicChatbot = async (
   req,
   res
 ) => {
+
   try {
 
     const { id } =
@@ -93,6 +94,25 @@ export const getPublicChatbot = async (
 
     /*
     ========================================
+    GET INTEGRATIONS
+    ========================================
+    */
+    const {
+      data: integrations,
+    } =
+      await supabase
+        .from(
+          "user_integrations"
+        )
+        .select("*")
+        .eq(
+          "user_id",
+          data.user_id
+        )
+        .maybeSingle();
+
+    /*
+    ========================================
     PARSE THEME SAFELY
     ========================================
     */
@@ -132,12 +152,31 @@ export const getPublicChatbot = async (
     ========================================
     */
     return res.status(200).json({
+
       success: true,
 
       subscription_expired:
         subscriptionExpired,
 
+      integrations: {
+
+        provider:
+          integrations?.provider ||
+          "calendly",
+
+        meeting_link:
+          integrations?.meeting_link ||
+          integrations?.calendly_link ||
+          "",
+
+        maps:
+          integrations?.maps ||
+          integrations?.google_maps_link ||
+          "",
+      },
+
       chatbot: {
+
         id: data.id,
 
         name: data.name,
@@ -152,6 +191,7 @@ export const getPublicChatbot = async (
           data.website_url,
 
         theme: {
+
           botName:
             parsedTheme.botName ||
             data.bot_name ||
@@ -161,11 +201,6 @@ export const getPublicChatbot = async (
             parsedTheme.logo ||
             "",
 
-          /*
-          ========================================
-          DEFAULT BLACK & WHITE THEME
-          ========================================
-          */
           chatBg:
             parsedTheme.chatBg ||
             "#0B1120",
@@ -212,6 +247,7 @@ export const getEmbedScript = async (
   req,
   res
 ) => {
+
   try {
 
     const { id } =
@@ -282,21 +318,25 @@ export const getEmbedScript = async (
     container.style,
     {
       position: "fixed",
-      bottom: "88px",
+      bottom: "92px",
       right: "20px",
-      width: "380px",
-      height: "700px",
+      width: "390px",
+      height: "760px",
       maxWidth: "calc(100vw - 20px)",
       maxHeight: "calc(100dvh - 100px)",
       zIndex: "999999",
       overflow: "hidden",
-      borderRadius: "28px",
+      borderRadius: "32px",
       display: "none",
       background: "#0B1120",
       boxShadow:
-        "0 20px 60px rgba(0,0,0,0.35)",
+        "0 20px 80px rgba(0,0,0,0.45)",
+      border:
+        "1px solid rgba(255,255,255,0.08)",
       transition:
         "all 0.25s ease",
+      backdropFilter:
+        "blur(20px)",
     }
   );
 
@@ -372,19 +412,19 @@ export const getEmbedScript = async (
     } else {
 
       container.style.width =
-        "380px";
+        "390px";
 
       container.style.height =
-        "700px";
+        "760px";
 
       container.style.right =
         "20px";
 
       container.style.bottom =
-        "88px";
+        "92px";
 
       container.style.borderRadius =
-        "28px";
+        "32px";
     }
   }
 
@@ -419,21 +459,22 @@ export const getEmbedScript = async (
       position: "fixed",
       bottom: "18px",
       right: "18px",
-      width: "64px",
-      height: "64px",
+      width: "68px",
+      height: "68px",
       borderRadius: "50%",
       border: "none",
       cursor: "pointer",
       overflow: "hidden",
-      background: "#000000",
+      background:
+        "linear-gradient(135deg,#7f5af0,#5b8cff)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       boxShadow:
-        "0 10px 35px rgba(0,0,0,0.18)",
+        "0 12px 40px rgba(127,90,240,0.45)",
       zIndex: "999999",
       transition:
-        "transform 0.2s ease",
+        "all 0.25s ease",
       padding: "0px",
     }
   );
@@ -462,7 +503,7 @@ export const getEmbedScript = async (
 
   /*
   ========================================
-  LOAD LOGO
+  LOAD BUSINESS LOGO
   ========================================
   */
   fetch(
@@ -492,6 +533,7 @@ export const getEmbedScript = async (
       }
     })
     .catch((err) => {
+
       console.log(
         "Logo load failed",
         err
@@ -506,6 +548,7 @@ export const getEmbedScript = async (
   button.addEventListener(
     "mouseenter",
     () => {
+
       button.style.transform =
         "scale(1.08)";
     }
@@ -514,6 +557,7 @@ export const getEmbedScript = async (
   button.addEventListener(
     "mouseleave",
     () => {
+
       button.style.transform =
         "scale(1)";
     }
@@ -535,10 +579,16 @@ export const getEmbedScript = async (
         container.style.display =
           "block";
 
+        button.style.transform =
+          "scale(0.95)";
+
       } else {
 
         container.style.display =
           "none";
+
+        button.style.transform =
+          "scale(1)";
       }
     }
   );
