@@ -193,8 +193,8 @@ export const getUserChatbots =
           success:
             false,
 
-            error:
-              err.message,
+          error:
+            err.message,
         });
     }
   };
@@ -294,34 +294,58 @@ export const getPublicChatbot =
       const {
         data:
           integrations,
+        error:
+          integrationError,
       } =
         await supabase
           .from(
             "user_integrations"
           )
-          .select(`
-            provider,
-            meeting_link,
-            maps
-          `)
+          .select("*")
           .eq(
             "user_id",
             chatbot.user_id
           )
           .maybeSingle();
 
+      if (integrationError) {
+
+        console.error(
+          "❌ INTEGRATION ERROR:",
+          integrationError
+        );
+      }
+
+      /*
+      ========================================
+      RESPONSE
+      ========================================
+      */
       return res.json({
 
         success:
           true,
 
-        chatbot,
-
-        integrations:
-          integrations ||
-          null,
-
         subscription_expired,
+
+        integrations: {
+
+          provider:
+            integrations?.provider ||
+            "calendly",
+
+          meeting_link:
+            integrations?.meeting_link ||
+            integrations?.calendly_link ||
+            "",
+
+          maps:
+            integrations?.maps ||
+            integrations?.google_maps_link ||
+            "",
+        },
+
+        chatbot,
       });
 
     } catch (err) {
@@ -514,11 +538,6 @@ export const deleteChatbot =
       const { id } =
         req.params;
 
-      /*
-      ========================================
-      DELETE RELATED DATA
-      ========================================
-      */
       await supabase
         .from(
           "chatbot_file_data"
@@ -557,11 +576,6 @@ export const deleteChatbot =
           id
         );
 
-      /*
-      ========================================
-      DELETE CHATBOT
-      ========================================
-      */
       const { error } =
         await supabase
           .from(
@@ -632,20 +646,10 @@ export const chatWithBot =
 
       } = req.body;
 
-      /*
-      ========================================
-      SUPPORT BOTH KEYS
-      ========================================
-      */
       const finalChatbotId =
         chatbotId ||
         chatbot_id;
 
-      /*
-      ========================================
-      VALIDATION
-      ========================================
-      */
       if (
         !message ||
         !finalChatbotId
@@ -663,11 +667,6 @@ export const chatWithBot =
           });
       }
 
-      /*
-      ========================================
-      GET CHATBOT
-      ========================================
-      */
       const {
         data: chatbot,
         error:
@@ -701,11 +700,6 @@ export const chatWithBot =
           });
       }
 
-      /*
-      ========================================
-      CHECK SUBSCRIPTION
-      ========================================
-      */
       const {
         data:
           subscription,
@@ -747,21 +741,27 @@ export const chatWithBot =
       const {
         data:
           integrations,
+        error:
+          integrationError,
       } =
         await supabase
           .from(
             "user_integrations"
           )
-          .select(`
-            provider,
-            meeting_link,
-            maps
-          `)
+          .select("*")
           .eq(
             "user_id",
             chatbot.user_id
           )
           .maybeSingle();
+
+      if (integrationError) {
+
+        console.error(
+          "❌ INTEGRATION ERROR:",
+          integrationError
+        );
+      }
 
       /*
       ========================================
@@ -802,17 +802,12 @@ export const chatWithBot =
             12000
           );
 
-      /*
-      ========================================
-      QUICK REPLIES
-      ========================================
-      */
       const lowerMessage =
         message.toLowerCase();
 
       /*
       ========================================
-      APPOINTMENT
+      APPOINTMENT QUICK REPLY
       ========================================
       */
       if (
@@ -831,13 +826,23 @@ export const chatWithBot =
 
         lowerMessage.includes(
           "demo"
+        ) ||
+
+        lowerMessage.includes(
+          "call"
+        ) ||
+
+        lowerMessage.includes(
+          "schedule"
         )
 
       ) {
 
-        if (
-          integrations?.meeting_link
-        ) {
+        const meetingLink =
+          integrations?.meeting_link ||
+          integrations?.calendly_link;
+
+        if (meetingLink) {
 
           return res.json({
 
@@ -845,16 +850,16 @@ export const chatWithBot =
               true,
 
             reply:
-`📅 You can book an appointment here:
+`📅 You can book a meeting here:
 
-${integrations.meeting_link}`,
+${meetingLink}`,
           });
         }
       }
 
       /*
       ========================================
-      LOCATION
+      LOCATION QUICK REPLY
       ========================================
       */
       if (
@@ -869,13 +874,23 @@ ${integrations.meeting_link}`,
 
         lowerMessage.includes(
           "address"
+        ) ||
+
+        lowerMessage.includes(
+          "visit"
+        ) ||
+
+        lowerMessage.includes(
+          "map"
         )
 
       ) {
 
-        if (
-          integrations?.maps
-        ) {
+        const mapsLink =
+          integrations?.maps ||
+          integrations?.google_maps_link;
+
+        if (mapsLink) {
 
           return res.json({
 
@@ -883,9 +898,9 @@ ${integrations.meeting_link}`,
               true,
 
             reply:
-`📍 Visit us here:
+`📍 You can visit us here:
 
-${integrations.maps}`,
+${mapsLink}`,
           });
         }
       }
@@ -1021,11 +1036,6 @@ BEHAVIOR RULES:
         );
       }
 
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
       return res.json({
 
         success:
@@ -1092,21 +1102,11 @@ export const scrapeWebsiteTraining =
           });
       }
 
-      /*
-      ========================================
-      SCRAPE
-      ========================================
-      */
       const content =
         await scrapeWebsite(
           website_url
         );
 
-      /*
-      ========================================
-      SAVE DATA
-      ========================================
-      */
       const { error } =
         await supabase
           .from(
