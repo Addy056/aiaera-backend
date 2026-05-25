@@ -48,38 +48,112 @@ if (!supabaseServiceKey) {
 
 /*
 ========================================
+PREVENT MULTIPLE CLIENTS
+========================================
+*/
+let supabaseInstance =
+  null;
+
+/*
+========================================
 CREATE CLIENT
 ========================================
 */
-export const supabase =
-  createClient(
-    supabaseUrl,
-    supabaseServiceKey,
-    {
-      auth: {
+const createSupabaseClient =
+  () => {
 
-        autoRefreshToken:
-          false,
+    if (
+      supabaseInstance
+    ) {
 
-        persistSession:
-          false,
-      },
-
-      global: {
-
-        headers: {
-          "x-application-name":
-            "AIAERA",
-        },
-      },
-
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
-        },
-      },
+      return supabaseInstance;
     }
-  );
+
+    supabaseInstance =
+      createClient(
+        supabaseUrl,
+        supabaseServiceKey,
+        {
+
+          auth: {
+
+            /*
+            ========================================
+            BACKEND SHOULD NEVER
+            PERSIST SESSIONS
+            ========================================
+            */
+            persistSession:
+              false,
+
+            /*
+            ========================================
+            NO AUTO REFRESH
+            ========================================
+            */
+            autoRefreshToken:
+              false,
+
+            /*
+            ========================================
+            NO URL SESSION DETECTION
+            ========================================
+            */
+            detectSessionInUrl:
+              false,
+          },
+
+          /*
+          ========================================
+          REALTIME
+          ========================================
+          */
+          realtime: {
+
+            params: {
+
+              eventsPerSecond:
+                5,
+            },
+          },
+
+          /*
+          ========================================
+          GLOBAL HEADERS
+          ========================================
+          */
+          global: {
+
+            headers: {
+
+              "x-application-name":
+                "AIAERA-Backend",
+            },
+          },
+
+          /*
+          ========================================
+          DATABASE
+          ========================================
+          */
+          db: {
+
+            schema:
+              "public",
+          },
+        }
+      );
+
+    return supabaseInstance;
+  };
+
+/*
+========================================
+EXPORT CLIENT
+========================================
+*/
+export const supabase =
+  createSupabaseClient();
 
 /*
 ========================================
@@ -87,5 +161,5 @@ STARTUP LOG
 ========================================
 */
 console.log(
-  "✅ Supabase client initialized"
+  "✅ Supabase backend initialized"
 );
