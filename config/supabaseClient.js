@@ -52,7 +52,7 @@ PREVENT MULTIPLE CLIENTS
 ========================================
 */
 let supabaseInstance =
-  null;
+  global.supabaseInstance;
 
 /*
 ========================================
@@ -62,6 +62,11 @@ CREATE CLIENT
 const createSupabaseClient =
   () => {
 
+    /*
+    ========================================
+    REUSE EXISTING CLIENT
+    ========================================
+    */
     if (
       supabaseInstance
     ) {
@@ -69,6 +74,11 @@ const createSupabaseClient =
       return supabaseInstance;
     }
 
+    /*
+    ========================================
+    CREATE CLIENT
+    ========================================
+    */
     supabaseInstance =
       createClient(
         supabaseUrl,
@@ -80,7 +90,7 @@ const createSupabaseClient =
             /*
             ========================================
             BACKEND SHOULD NEVER
-            PERSIST SESSIONS
+            STORE SESSIONS
             ========================================
             */
             persistSession:
@@ -88,7 +98,7 @@ const createSupabaseClient =
 
             /*
             ========================================
-            NO AUTO REFRESH
+            DISABLE AUTO REFRESH
             ========================================
             */
             autoRefreshToken:
@@ -96,7 +106,8 @@ const createSupabaseClient =
 
             /*
             ========================================
-            NO URL SESSION DETECTION
+            BACKEND DOES NOT
+            USE URL SESSIONS
             ========================================
             */
             detectSessionInUrl:
@@ -105,7 +116,18 @@ const createSupabaseClient =
 
           /*
           ========================================
-          REALTIME
+          DATABASE
+          ========================================
+          */
+          db: {
+
+            schema:
+              "public",
+          },
+
+          /*
+          ========================================
+          REALTIME LIMITS
           ========================================
           */
           realtime: {
@@ -130,19 +152,16 @@ const createSupabaseClient =
                 "AIAERA-Backend",
             },
           },
-
-          /*
-          ========================================
-          DATABASE
-          ========================================
-          */
-          db: {
-
-            schema:
-              "public",
-          },
         }
       );
+
+    /*
+    ========================================
+    SAVE GLOBALLY
+    ========================================
+    */
+    global.supabaseInstance =
+      supabaseInstance;
 
     return supabaseInstance;
   };
