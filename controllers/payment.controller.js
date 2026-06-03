@@ -7,6 +7,20 @@ import { supabase }
 
 /*
 ========================================
+CHECK ENV VARIABLES
+========================================
+*/
+if (
+  !process.env.RAZORPAY_KEY_ID ||
+  !process.env.RAZORPAY_KEY_SECRET
+) {
+  console.error(
+    "❌ Razorpay ENV variables missing"
+  );
+}
+
+/*
+========================================
 RAZORPAY INSTANCE
 ========================================
 */
@@ -57,11 +71,64 @@ export const createOrder =
         "🔥 CREATE ORDER HIT"
       );
 
+      /*
+      ========================================
+      ENV CHECK
+      ========================================
+      */
+      if (
+        !process.env.RAZORPAY_KEY_ID ||
+        !process.env.RAZORPAY_KEY_SECRET
+      ) {
+
+        console.error(
+          "❌ Razorpay keys missing"
+        );
+
+        return res
+          .status(500)
+          .json({
+
+            success: false,
+
+            error:
+              "Razorpay configuration missing",
+          });
+      }
+
       const userId =
-        req.user.id;
+        req.user?.id;
 
       const { plan } =
         req.body;
+
+      console.log(
+        "USER ID:",
+        userId
+      );
+
+      console.log(
+        "PLAN:",
+        plan
+      );
+
+      /*
+      ========================================
+      VALIDATE USER
+      ========================================
+      */
+      if (!userId) {
+
+        return res
+          .status(401)
+          .json({
+
+            success: false,
+
+            error:
+              "Unauthorized user",
+          });
+      }
 
       /*
       ========================================
@@ -93,6 +160,8 @@ export const createOrder =
       */
       const {
         data: existingSubscription,
+        error:
+          subscriptionFetchError,
       } =
         await supabase
           .from(
@@ -105,6 +174,16 @@ export const createOrder =
           )
           .maybeSingle();
 
+      if (
+        subscriptionFetchError
+      ) {
+
+        console.error(
+          "❌ Subscription fetch error:",
+          subscriptionFetchError
+        );
+      }
+
       /*
       ========================================
       AMOUNT
@@ -115,34 +194,65 @@ export const createOrder =
           plan
         ].amount;
 
+      console.log(
+        "AMOUNT:",
+        amount
+      );
+
       /*
       ========================================
-      CREATE ORDER
+      CREATE ORDER OPTIONS
+      ========================================
+      */
+      const options = {
+
+        amount,
+
+        currency:
+          "INR",
+
+        receipt:
+          `aiaera_${userId}_${Date.now()}`,
+
+        notes: {
+
+          userId,
+
+          plan,
+
+          existingPlan:
+            existingSubscription?.plan ||
+            "none",
+        },
+      };
+
+      console.log(
+        "RAZORPAY OPTIONS:",
+        options
+      );
+
+      /*
+      ========================================
+      CREATE RAZORPAY ORDER
       ========================================
       */
       const order =
-        await razorpay.orders.create({
+        await razorpay
+          .orders
+          .create(
+            options
+          );
 
-          amount,
+      console.log(
+        "✅ ORDER CREATED:",
+        order
+      );
 
-          currency:
-            "INR",
-
-          receipt:
-            `aiaera_${userId}_${Date.now()}`,
-
-          notes: {
-
-            userId,
-
-            plan,
-
-            existingPlan:
-              existingSubscription?.plan ||
-              "none",
-          },
-        });
-
+      /*
+      ========================================
+      SUCCESS RESPONSE
+      ========================================
+      */
       return res.json({
 
         success: true,
@@ -163,11 +273,35 @@ export const createOrder =
 
     } catch (err) {
 
+      /*
+      ========================================
+      FULL ERROR LOGGING
+      ========================================
+      */
       console.error(
-        "❌ CREATE ORDER ERROR:",
+        "❌ CREATE ORDER ERROR:"
+      );
+
+      console.error(
+        "MESSAGE:",
+        err.message
+      );
+
+      console.error(
+        "STACK:",
+        err.stack
+      );
+
+      console.error(
+        "FULL ERROR:",
         err
       );
 
+      /*
+      ========================================
+      RETURN ACTUAL ERROR
+      ========================================
+      */
       return res
         .status(500)
         .json({
@@ -176,6 +310,7 @@ export const createOrder =
             false,
 
           error:
+            err.message ||
             "Failed to create order",
         });
     }
@@ -364,11 +499,6 @@ export const verifyPayment =
           });
       }
 
-      /*
-      ========================================
-      SUCCESS
-      ========================================
-      */
       return res.json({
 
         success: true,
@@ -400,6 +530,7 @@ export const verifyPayment =
             false,
 
           error:
+            err.message ||
             "Verification failed",
         });
     }
@@ -439,11 +570,6 @@ export const getSubscriptionStatus =
       if (error)
         throw error;
 
-      /*
-      ========================================
-      NO SUBSCRIPTION
-      ========================================
-      */
       if (!data) {
 
         return res.json({
@@ -458,11 +584,6 @@ export const getSubscriptionStatus =
         });
       }
 
-      /*
-      ========================================
-      EXPIRATION CHECK
-      ========================================
-      */
       const expired =
         data.expires_at
           ? new Date(
@@ -496,6 +617,7 @@ export const getSubscriptionStatus =
             false,
 
           error:
+            err.message ||
             "Failed to fetch subscription",
         });
     }
@@ -517,11 +639,6 @@ export const cancelSubscription =
       const userId =
         req.user.id;
 
-      /*
-      ========================================
-      EXPIRE SUBSCRIPTION
-      ========================================
-      */
       const {
         error,
       } =
@@ -565,6 +682,7 @@ export const cancelSubscription =
             false,
 
           error:
+            err.message ||
             "Failed to cancel subscription",
         });
     }

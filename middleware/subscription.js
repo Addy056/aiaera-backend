@@ -128,13 +128,41 @@ export const checkSubscription =
 
       /*
       ========================================
+      DATABASE ERROR
+      ========================================
+      */
+      if (error) {
+
+        console.error(
+          "❌ Subscription fetch error:",
+          error
+        );
+
+        return {
+
+          active:
+            false,
+
+          expired:
+            true,
+
+          plan:
+            PLAN_TYPES.FREE,
+
+          features:
+            PLAN_FEATURES.free,
+
+          subscription:
+            null,
+        };
+      }
+
+      /*
+      ========================================
       NO SUBSCRIPTION
       ========================================
       */
-      if (
-        error ||
-        !data
-      ) {
+      if (!data) {
 
         return {
 
@@ -177,7 +205,7 @@ export const checkSubscription =
               data.expires_at
             ).getTime() <
             Date.now()
-          : false;
+          : true;
 
       const active =
         !expired;
@@ -279,10 +307,10 @@ export const requireSubscription =
       ADMIN BYPASS
       ========================================
       */
-      const ADMIN_EMAILS = [
-
-        "dhawaleaditya077@gmail.com",
-      ];
+      const ADMIN_EMAILS =
+        process.env
+          .ADMIN_EMAILS
+          ?.split(",") || [];
 
       if (
         ADMIN_EMAILS.includes(
@@ -358,7 +386,7 @@ export const requireSubscription =
       CONTINUE
       ========================================
       */
-      next();
+      return next();
 
     } catch (err) {
 
@@ -419,6 +447,29 @@ export const requireFeatureAccess =
 
               error:
                 "Unauthorized",
+            });
+        }
+
+        /*
+        ========================================
+        FEATURE VALIDATION
+        ========================================
+        */
+        if (
+          !Object.keys(
+            PLAN_FEATURES.pro
+          ).includes(featureName)
+        ) {
+
+          return res
+            .status(400)
+            .json({
+
+              success:
+                false,
+
+              error:
+                "Invalid feature requested",
             });
         }
 
@@ -507,7 +558,7 @@ export const requireFeatureAccess =
         CONTINUE
         ========================================
         */
-        next();
+        return next();
 
       } catch (err) {
 
