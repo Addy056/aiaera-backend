@@ -1,4 +1,5 @@
 import express from "express";
+import Razorpay from "razorpay";
 
 import {
   createOrder,
@@ -32,7 +33,6 @@ router.get(
 /*
 ========================================
 DEBUG ENV CHECK
-VERY IMPORTANT FOR PRODUCTION
 ========================================
 */
 router.get(
@@ -62,11 +62,45 @@ router.get(
 
 /*
 ========================================
-CREATE ORDER
+DEBUG RAZORPAY
 ========================================
-Plans:
-- basic
-- pro
+*/
+router.get(
+  "/debug/razorpay",
+  async (req, res) => {
+    try {
+      const razorpay = new Razorpay({
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      });
+
+      const order = await razorpay.orders.create({
+        amount: 100,
+        currency: "INR",
+        receipt: `debug_${Date.now()}`,
+      });
+
+      return res.status(200).json({
+        success: true,
+        order,
+      });
+    } catch (err) {
+      console.error("RAZORPAY DEBUG ERROR:", err);
+
+      return res.status(500).json({
+        success: false,
+        message: err?.message,
+        description: err?.description,
+        error: err?.error,
+        statusCode: err?.statusCode,
+      });
+    }
+  }
+);
+
+/*
+========================================
+CREATE ORDER
 ========================================
 */
 router.post(
@@ -108,8 +142,6 @@ router.post(
 ========================================
 VERIFY PAYMENT
 ========================================
-After successful Razorpay payment
-========================================
 */
 router.post(
   "/verify",
@@ -145,11 +177,6 @@ router.post(
 ========================================
 GET SUBSCRIPTION STATUS
 ========================================
-Returns:
-- plan
-- expires_at
-- expired state
-========================================
 */
 router.get(
   "/subscription",
@@ -160,8 +187,6 @@ router.get(
 /*
 ========================================
 CANCEL SUBSCRIPTION
-========================================
-Disables future renewals
 ========================================
 */
 router.post(
@@ -187,6 +212,9 @@ router.get(
 
         debugEnv:
           "GET /api/payment/debug/env",
+
+        debugRazorpay:
+          "GET /api/payment/debug/razorpay",
 
         createOrder:
           "POST /api/payment/create-order",
@@ -214,8 +242,7 @@ router.use(
   (req, res) => {
     return res.status(404).json({
       success: false,
-      error:
-        "Payment route not found",
+      error: "Payment route not found",
       path: req.originalUrl,
     });
   }
