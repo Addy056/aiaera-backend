@@ -805,57 +805,57 @@ export const chatWithBot =
       const lowerMessage =
         message.toLowerCase();
 
-      /*
-      ========================================
-      APPOINTMENT QUICK REPLY
-      ========================================
-      */
-      if (
+     /*
+========================================
+APPOINTMENT LEAD CAPTURE
+========================================
+*/
+if (
 
-        lowerMessage.includes(
-          "appointment"
-        ) ||
+  lowerMessage.includes("appointment") ||
+  lowerMessage.includes("book") ||
+  lowerMessage.includes("meeting") ||
+  lowerMessage.includes("demo") ||
+  lowerMessage.includes("call") ||
+  lowerMessage.includes("schedule")
 
-        lowerMessage.includes(
-          "book"
-        ) ||
+) {
 
-        lowerMessage.includes(
-          "meeting"
-        ) ||
+  await supabase
+    .from("leads")
+    .insert([{
 
-        lowerMessage.includes(
-          "demo"
-        ) ||
+      chatbot_id:
+        finalChatbotId,
 
-        lowerMessage.includes(
-          "call"
-        ) ||
+      user_id:
+        chatbot.user_id,
 
-        lowerMessage.includes(
-          "schedule"
-        )
+      name:
+        "Lead Pending",
 
-      ) {
+      email:
+        null,
 
-        const meetingLink =
-          integrations?.meeting_link ||
-          integrations?.calendly_link;
+      message,
+    }]);
 
-        if (meetingLink) {
+  return res.json({
 
-          return res.json({
+    success: true,
 
-            success:
-              true,
+    reply:
+`I'd be happy to help schedule that.
 
-            reply:
-`📅 You can book a meeting here:
+Before we continue, please provide:
 
-${meetingLink}`,
-          });
-        }
-      }
+• Your Full Name
+• Your Email Address
+• Your Phone Number
+
+Once you share those details, we'll help you book your appointment.`
+  });
+}
 
       /*
       ========================================
