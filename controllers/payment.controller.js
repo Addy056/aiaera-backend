@@ -211,8 +211,8 @@ export const createOrder =
         currency:
           "INR",
 
-        receipt:
-          `aiaera_${userId}_${Date.now()}`,
+       receipt:
+  `ord_${Date.now()}`,
 
         notes: {
 
@@ -282,10 +282,20 @@ export const createOrder =
         "❌ CREATE ORDER ERROR:"
       );
 
-      console.error(
-        "MESSAGE:",
-        err.message
-      );
+     console.error(
+  "MESSAGE:",
+  err?.message
+);
+
+console.error(
+  "RAZORPAY DESCRIPTION:",
+  err?.error?.description
+);
+
+console.error(
+  "STATUS CODE:",
+  err?.statusCode
+);
 
       console.error(
         "STACK:",
@@ -309,9 +319,10 @@ export const createOrder =
           success:
             false,
 
-          error:
-            err.message ||
-            "Failed to create order",
+         error:
+  err?.error?.description ||
+  err?.message ||
+  "Failed to create order",
         });
     }
   };
