@@ -644,6 +644,8 @@ export const chatWithBot =
 
         chatbot_id,
 
+        messages = [],
+
       } = req.body;
 
       const finalChatbotId =
@@ -937,7 +939,33 @@ BEHAVIOR RULES:
 - Use training data accurately
 - Avoid hallucinations
 - Collect leads naturally
-- Encourage appointments naturally
+
+- If a user asks for:
+  appointment
+  booking
+  demo
+  meeting
+  consultation
+  call
+  visit
+  pricing
+  quote
+
+  ask for:
+
+  1. Full Name
+  2. Email Address
+  3. Phone Number
+
+  before giving booking information.
+
+- Never ask for the same information twice.
+
+- Use previous conversation messages as context.
+
+- Remember information already provided by the user.
+
+- Encourage appointments naturally.
 - If information is unavailable, politely say so
 `;
 
@@ -946,45 +974,49 @@ BEHAVIOR RULES:
       GROQ RESPONSE
       ========================================
       */
-      const completion =
-        await groq.chat.completions.create({
+      const conversationHistory =
+  (messages || [])
+    .slice(-20)
+    .map((msg) => ({
 
-          model:
-            "llama-3.1-8b-instant",
+      role:
+        msg.role === "bot"
+          ? "assistant"
+          : "user",
 
-          temperature:
-            0.7,
+      content:
+        msg.text || "",
+    }));
 
-          max_tokens:
-            500,
+const completion =
+  await groq.chat.completions.create({
 
-          messages: [
+    model:
+      "llama-3.1-8b-instant",
 
-            {
-              role:
-                "system",
+    temperature:
+      0.7,
 
-              content:
-                systemPrompt,
-            },
+    max_tokens:
+      500,
 
-            {
-              role:
-                "user",
+    messages: [
 
-              content:
-                message,
-            },
-          ],
-        });
+      {
+        role: "system",
+        content: systemPrompt,
+      },
 
-      const reply =
-        completion
-          ?.choices?.[0]
-          ?.message
-          ?.content
-          ?.trim() ||
-        "I'm here to help.";
+      ...conversationHistory,
+    ],
+  });
+  const reply =
+  completion
+    ?.choices?.[0]
+    ?.message
+    ?.content
+    ?.trim() ||
+  "I'm here to help.";
 
       /*
       ========================================
