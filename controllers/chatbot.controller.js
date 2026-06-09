@@ -6,8 +6,6 @@ import { supabase }
 import { scrapeWebsite }
   from "../utils/scraper.js";
 
-import { extractLeadData }
-  from "../utils/leadExtractor.js";
 
 /*
 ========================================
@@ -808,7 +806,21 @@ export const chatWithBot =
 
       const lowerMessage =
         message.toLowerCase();
-
+const {
+  data: session,
+} =
+  await supabase
+    .from("chat_sessions")
+    .select("*")
+    .eq(
+      "chatbot_id",
+      finalChatbotId
+    )
+    .eq(
+      "visitor_id",
+      visitorId
+    )
+    .maybeSingle();
    /*
 ========================================
 APPOINTMENT REQUEST
@@ -825,20 +837,200 @@ if (
 
 ) {
 
+  if (!session) {
+
+    await supabase
+      .from("chat_sessions")
+      .insert([{
+
+        chatbot_id:
+          finalChatbotId,
+
+        visitor_id:
+          visitorId,
+
+        stage:
+          "name",
+
+      }]);
+  }
+
   return res.json({
 
     success: true,
 
     reply:
-`I'd be happy to help schedule that.
+      "I'd be happy to help. What is your full name?",
 
-Before we continue, please provide:
+  });
+}
+/*
+========================================
+NAME COLLECTION
+========================================
+*/
+if (
+  session?.stage === "name"
+) {
 
-• Your Full Name
-• Your Email Address
-• Your Phone Number
+  await supabase
+    .from("chat_sessions")
+    .update({
 
-Once you share those details, we'll help you book your appointment.`
+      name: message,
+
+      stage: "email",
+
+    })
+    .eq(
+      "id",
+      session.id
+    );
+
+  return res.json({
+
+    success: true,
+
+    reply:
+      "Thank you. What is your email address?",
+
+  });
+}
+/*
+========================================
+EMAIL COLLECTION
+========================================
+*/
+if (
+  session?.stage === "email"
+) {
+
+  await supabase
+    .from("chat_sessions")
+    .update({
+
+      email: message,
+
+      stage: "phone",
+
+    })
+    .eq(
+      "id",
+      session.id
+    );
+
+  return res.json({
+
+    success: true,
+
+    reply:
+      "Perfect. What is your phone number?",
+
+  });
+}
+/*
+========================================
+PHONE COLLECTION
+========================================
+*/
+if (
+  session?.stage === "phone"
+) {
+
+  await supabase
+    .from("chat_sessions")
+    .update({
+
+      phone: message,
+
+      stage: "complete",
+
+    })
+    .eq(
+      "id",
+      session.id
+    );
+
+  const {
+    data: completedSession,
+  } =
+    await supabase
+      .from("chat_sessions")
+      .select("*")
+      .eq(
+        "id",
+        session.id
+      )
+      .single();
+
+  const {
+    data: existingLead,
+  } =
+    await supabase
+      .from("leads")
+      .select("id")
+      .eq(
+        "chatbot_id",
+        finalChatbotId
+      )
+      .eq(
+        "email",
+        completedSession.email
+      )
+      .maybeSingle();
+
+  if (!existingLead) {
+
+   await supabase
+  .from("leads")
+  .insert([{
+
+    chatbot_id:
+      finalChatbotId,
+
+    user_id:
+      chatbot.user_id,
+
+    name:
+      completedSession.name,
+
+    email:
+      completedSession.email,
+
+    phone:
+      completedSession.phone,
+
+    source:
+      "website",
+
+    message:
+      "Appointment Lead",
+
+  }]);
+  }
+
+  await supabase
+    .from("chat_sessions")
+    .delete()
+    .eq(
+      "id",
+      session.id
+    );
+
+  return res.json({
+
+    success: true,
+
+    reply:
+      integrations?.meeting_link ||
+      integrations?.calendly_link
+        ? `Thank you. Your appointment request has been submitted.
+
+Book here:
+
+${integrations.meeting_link || integrations.calendly_link}`
+        : "Thank you. We will contact you shortly.",
+
   });
 }
 
@@ -1001,88 +1193,13 @@ const completion =
     ?.trim() ||
   "I'm here to help.";
 
-     /*
-========================================
-LEAD EXTRACTION
-========================================
-*/
-try {
-
-  const leadData =
-    extractLeadData(
-      message
-    );
-
-  if (
-    leadData?.email &&
-    leadData?.phone
-  ) {
-
-    const {
-      data: existingLead,
-    } =
-      await supabase
-        .from("leads")
-        .select("id")
-        .eq(
-          "chatbot_id",
-          finalChatbotId
-        )
-        .eq(
-          "email",
-          leadData.email
-        )
-        .maybeSingle();
-
-    if (
-      !existingLead
-    ) {
-
-      await supabase
-        .from("leads")
-        .insert([{
-
-          chatbot_id:
-            finalChatbotId,
-
-          user_id:
-            chatbot.user_id,
-
-          name:
-            leadData.name ||
-            "Unknown",
-
-          email:
-            leadData.email,
-
-          phone:
-            leadData.phone,
-
-          message:
-            "Appointment Lead",
-
-          source:
-            "chatbot",
-        }]);
-    }
-  }
-
-} catch (
-  leadError
-) {
-
-  console.error(
-    "❌ LEAD ERROR:",
-    leadError
-  );
-}
-
-      return res.json({
+          return res.json({
 
         success:
           true,
 
         reply,
+
       });
 
     } catch (err) {
@@ -1104,7 +1221,6 @@ try {
         });
     }
   };
-
 /*
 ========================================
 SCRAPE WEBSITE TRAINING
