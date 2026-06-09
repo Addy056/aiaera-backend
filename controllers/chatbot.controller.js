@@ -644,6 +644,8 @@ export const chatWithBot =
 
         chatbot_id,
 
+        visitorId,
+
         messages = [],
 
       } = req.body;
@@ -807,9 +809,9 @@ export const chatWithBot =
       const lowerMessage =
         message.toLowerCase();
 
-     /*
+   /*
 ========================================
-APPOINTMENT LEAD CAPTURE
+APPOINTMENT REQUEST
 ========================================
 */
 if (
@@ -822,25 +824,6 @@ if (
   lowerMessage.includes("schedule")
 
 ) {
-
-  await supabase
-    .from("leads")
-    .insert([{
-
-      chatbot_id:
-        finalChatbotId,
-
-      user_id:
-        chatbot.user_id,
-
-      name:
-        "Lead Pending",
-
-      email:
-        null,
-
-      message,
-    }]);
 
   return res.json({
 
@@ -1018,55 +1001,81 @@ const completion =
     ?.trim() ||
   "I'm here to help.";
 
-      /*
-      ========================================
-      LEAD EXTRACTION
-      ========================================
-      */
-      try {
+     /*
+========================================
+LEAD EXTRACTION
+========================================
+*/
+try {
 
-        const leadData =
-          extractLeadData(
-            message
-          );
+  const leadData =
+    extractLeadData(
+      message
+    );
 
-        if (
-          leadData?.isLead
-        ) {
+  if (
+    leadData?.email &&
+    leadData?.phone
+  ) {
 
-          await supabase
-            .from(
-              "leads"
-            )
-            .insert([{
+    const {
+      data: existingLead,
+    } =
+      await supabase
+        .from("leads")
+        .select("id")
+        .eq(
+          "chatbot_id",
+          finalChatbotId
+        )
+        .eq(
+          "email",
+          leadData.email
+        )
+        .maybeSingle();
 
-              chatbot_id:
-                finalChatbotId,
+    if (
+      !existingLead
+    ) {
 
-              user_id:
-                chatbot.user_id,
+      await supabase
+        .from("leads")
+        .insert([{
 
-              name:
-                leadData.name ||
-                "Unknown",
+          chatbot_id:
+            finalChatbotId,
 
-              email:
-                leadData.email ||
-                null,
+          user_id:
+            chatbot.user_id,
 
-              message,
-            }]);
-        }
+          name:
+            leadData.name ||
+            "Unknown",
 
-      } catch (
-        leadError
-      ) {
+          email:
+            leadData.email,
 
-        console.error(
-          "❌ LEAD ERROR:",
-          leadError
-        );
-      }
+          phone:
+            leadData.phone,
+
+          message:
+            "Appointment Lead",
+
+          source:
+            "chatbot",
+        }]);
+    }
+  }
+
+} catch (
+  leadError
+) {
+
+  console.error(
+    "❌ LEAD ERROR:",
+    leadError
+  );
+}
 
       return res.json({
 
