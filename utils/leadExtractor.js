@@ -28,7 +28,7 @@ export const extractPhone = (
 ) => {
 
   const phoneRegex =
-    /(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4,6}/g;
+    /(?:\+91|91)?[6-9]\d{9}/g;
 
   const matches =
     text.match(
@@ -40,8 +40,8 @@ export const extractPhone = (
   }
 
   return matches[0]
-    .replace(/\s+/g, "")
-    .trim();
+    .replace(/\D/g, "")
+    .slice(-10);
 };
 
 /*
@@ -55,18 +55,18 @@ export const extractName = (
 
   /*
   ========================================
-  SIMPLE NAME PATTERNS
+  NORMAL NAME PATTERNS
   ========================================
   */
   const patterns = [
 
-    /my name is\s+([A-Za-z ]{2,30})/i,
+    /my name is\s+([A-Za-z ]{2,50})/i,
 
-    /i am\s+([A-Za-z ]{2,30})/i,
+    /i am\s+([A-Za-z ]{2,50})/i,
 
-    /this is\s+([A-Za-z ]{2,30})/i,
+    /this is\s+([A-Za-z ]{2,50})/i,
 
-    /I'm\s+([A-Za-z ]{2,30})/i,
+    /i'm\s+([A-Za-z ]{2,50})/i,
   ];
 
   for (const pattern of patterns) {
@@ -86,6 +86,39 @@ export const extractName = (
         .split(" ")
         .slice(0, 3)
         .join(" ");
+    }
+  }
+
+  /*
+  ========================================
+  CSV FORMAT
+  Example:
+  Aditya,aditya@gmail.com,9270099536
+  ========================================
+  */
+  if (
+    text.includes("@")
+  ) {
+
+    const parts =
+      text
+        .split(",")
+        .map(
+          (part) =>
+            part.trim()
+        );
+
+    const possibleName =
+      parts[0];
+
+    if (
+      possibleName &&
+      /^[A-Za-z ]+$/.test(
+        possibleName
+      )
+    ) {
+
+      return possibleName;
     }
   }
 
@@ -118,16 +151,26 @@ export const extractLeadData = (
 
   /*
   ========================================
-  ONLY SAVE VALID LEADS
+  VALID LEAD
   ========================================
   */
   const isLead =
-    email || phone;
+    !!(
+      email ||
+      phone
+    );
 
   return {
+
     isLead,
-    name,
-    email,
-    phone,
+
+    name:
+      name || null,
+
+    email:
+      email || null,
+
+    phone:
+      phone || null,
   };
 };
