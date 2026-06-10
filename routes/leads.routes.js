@@ -1,35 +1,22 @@
 import express from "express";
 
 import {
-
   createLead,
-
   getLeads,
-
   deleteLead,
-
   exportLeadsCSV,
-
   getLeadStats,
-
 } from "../controllers/leads.controller.js";
 
-import {
-  authMiddleware,
-} from "../middleware/auth.js";
+import { authMiddleware } from "../middleware/auth.js";
 
-import {
-  checkSubscription,
-} from "../middleware/subscription.js";
+import { checkSubscription } from "../middleware/subscription.js";
 
-const router =
-  express.Router();
+const router = express.Router();
 
 /*
 ========================================
 PUBLIC ROUTES
-========================================
-Accessible without auth
 ========================================
 */
 
@@ -45,73 +32,45 @@ Used by:
 - Instagram automation
 ========================================
 */
-router.post(
-  "/",
-  createLead
-);
+router.post("/", createLead);
 
 /*
 ========================================
 HEALTH CHECK
 ========================================
 */
-router.get(
-  "/health",
-  (req, res) => {
-
-    return res.status(200).json({
-
-      success: true,
-
-      message:
-        "Leads routes working ✅",
-
-      timestamp:
-        new Date(),
-    });
-  }
-);
+router.get("/health", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: "Leads routes working ✅",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 /*
 ========================================
 DEBUG ROUTES
 ========================================
 */
-router.get(
-  "/debug/routes",
-  (req, res) => {
-
-    return res.status(200).json({
-
-      success: true,
-
-      routes: {
-
-        create:
-          "POST /api/leads",
-
-        getAll:
-          "GET /api/leads",
-
-        delete:
-          "DELETE /api/leads/:id",
-
-        export:
-          "GET /api/leads/export/csv",
-
-        stats:
-          "GET /api/leads/stats",
-      },
-    });
-  }
-);
+router.get("/debug/routes", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    routes: {
+      create: "POST /api/leads",
+      getAll: "GET /api/leads",
+      delete: "DELETE /api/leads/:id",
+      export: "GET /api/leads/export/csv",
+      stats: "GET /api/leads/stats",
+      health: "GET /api/leads/health",
+    },
+  });
+});
 
 /*
 ========================================
 PROTECTED ROUTES
 ========================================
-Requires:
-- Authentication
+Requires Authentication
 ========================================
 */
 
@@ -136,6 +95,7 @@ Returns:
 - total leads
 - emails collected
 - messages collected
+- phones collected
 ========================================
 */
 router.get(
@@ -148,7 +108,7 @@ router.get(
 ========================================
 EXPORT CSV
 ========================================
-Requires active subscription
+Requires Active Subscription
 ========================================
 */
 router.get(
@@ -162,7 +122,7 @@ router.get(
 ========================================
 DELETE LEAD
 ========================================
-Requires active subscription
+Requires Active Subscription
 ========================================
 */
 router.delete(
