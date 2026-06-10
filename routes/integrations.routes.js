@@ -1,21 +1,13 @@
 import express from "express";
 
 import {
-
   saveIntegration,
-
   getIntegration,
-
   getPublicIntegrations,
-
   toggleAutomation,
-
   testConnection,
-
   deleteIntegration,
-
   getAutomationStatus,
-
 } from "../controllers/integrations.controller.js";
 
 import {
@@ -23,11 +15,10 @@ import {
 } from "../middleware/auth.js";
 
 import {
-  checkSubscription,
+  requireSubscription,
 } from "../middleware/subscription.js";
 
-const router =
-  express.Router();
+const router = express.Router();
 
 /*
 ========================================
@@ -66,16 +57,10 @@ HEALTH CHECK
 router.get(
   "/health",
   (req, res) => {
-
     return res.status(200).json({
-
       success: true,
-
-      message:
-        "Integrations API working ✅",
-
-      timestamp:
-        new Date(),
+      message: "Integrations API working ✅",
+      timestamp: new Date(),
     });
   }
 );
@@ -88,26 +73,12 @@ DEBUG ROUTES
 router.get(
   "/debug/routes",
   (req, res) => {
-
     return res.status(200).json({
-
       success: true,
-
       routes: {
-
-        /*
-        ====================================
-        PUBLIC
-        ====================================
-        */
         public:
           "GET /api/integrations/public/:chatbotId",
 
-        /*
-        ====================================
-        PROTECTED
-        ====================================
-        */
         save:
           "POST /api/integrations",
 
@@ -158,7 +129,7 @@ Supports:
 router.post(
   "/",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   saveIntegration
 );
 
@@ -186,7 +157,7 @@ Platforms:
 router.patch(
   "/toggle",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   toggleAutomation
 );
 
@@ -214,7 +185,7 @@ TEST CONNECTION
 router.post(
   "/test",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   testConnection
 );
 
@@ -226,7 +197,7 @@ DELETE INTEGRATION
 router.delete(
   "/:platform",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   deleteIntegration
 );
 
