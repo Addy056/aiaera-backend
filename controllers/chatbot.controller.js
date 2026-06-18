@@ -981,32 +981,89 @@ if (
 
   if (!existingLead) {
 
-   await supabase
-  .from("leads")
-  .insert([{
+    await supabase
+      .from("leads")
+      .insert([{
 
-    chatbot_id:
-      finalChatbotId,
+        chatbot_id:
+          finalChatbotId,
 
-    user_id:
-      chatbot.user_id,
+        user_id:
+          chatbot.user_id,
 
-    name:
-      completedSession.name,
+        name:
+          completedSession.name,
 
-    email:
-      completedSession.email,
+        email:
+          completedSession.email,
 
-    phone:
-      completedSession.phone,
+        phone:
+          completedSession.phone,
 
-    source:
-      "website",
+        source:
+          "website",
 
-    message:
-      "Appointment Lead",
+        message:
+          "Appointment Lead",
 
-  }]);
+      }]);
+  }
+
+  /*
+  ========================================
+  CREATE APPOINTMENT
+  ========================================
+  */
+  const {
+    data: existingAppointment,
+  } =
+    await supabase
+      .from("appointments")
+      .select("id")
+      .eq(
+        "chatbot_id",
+        finalChatbotId
+      )
+      .eq(
+        "customer_email",
+        completedSession.email
+      )
+      .maybeSingle();
+
+  if (!existingAppointment) {
+
+    await supabase
+      .from("appointments")
+      .insert([{
+
+        user_id:
+          chatbot.user_id,
+
+        chatbot_id:
+          finalChatbotId,
+
+        customer_name:
+          completedSession.name,
+
+        customer_email:
+          completedSession.email,
+
+        customer_phone:
+          completedSession.phone,
+
+        meeting_link:
+          integrations?.meeting_link ||
+          integrations?.calendly_link ||
+          null,
+
+        provider:
+          integrations?.provider ||
+          "custom",
+
+        status:
+          "pending",
+
+      }]);
   }
 
   await supabase
@@ -1026,10 +1083,12 @@ if (
       integrations?.calendly_link
         ? `Thank you. Your appointment request has been submitted.
 
-Book here:
+Status: Pending
+
+Please choose a suitable time below:
 
 ${integrations.meeting_link || integrations.calendly_link}`
-        : "Thank you. We will contact you shortly.",
+        : "Thank you. Your appointment request has been submitted and is currently pending approval.",
 
   });
 }

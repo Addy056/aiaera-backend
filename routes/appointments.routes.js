@@ -6,6 +6,8 @@ import {
 
   getAppointments,
 
+  updateAppointmentStatus,
+
   deleteAppointment,
 
   getAppointmentStats,
@@ -26,8 +28,6 @@ const router =
 /*
 ========================================
 PUBLIC ROUTES
-========================================
-Accessible without auth
 ========================================
 */
 
@@ -91,6 +91,9 @@ router.get(
         getAll:
           "GET /api/appointments",
 
+        updateStatus:
+          "PATCH /api/appointments/:id/status",
+
         delete:
           "DELETE /api/appointments/:id",
 
@@ -105,16 +108,13 @@ router.get(
 ========================================
 PROTECTED ROUTES
 ========================================
-Requires:
-- Authentication
+Requires Authentication
 ========================================
 */
 
 /*
 ========================================
 GET ALL APPOINTMENTS
-========================================
-Dashboard page
 ========================================
 */
 router.get(
@@ -127,11 +127,6 @@ router.get(
 ========================================
 APPOINTMENT STATS
 ========================================
-Returns:
-- total appointments
-- this month
-- booked meetings
-========================================
 */
 router.get(
   "/stats",
@@ -141,9 +136,25 @@ router.get(
 
 /*
 ========================================
-DELETE APPOINTMENT
+UPDATE APPOINTMENT STATUS
 ========================================
-Requires active subscription
+Statuses:
+- pending
+- accepted
+- rejected
+- completed
+========================================
+*/
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  checkSubscription,
+  updateAppointmentStatus
+);
+
+/*
+========================================
+DELETE APPOINTMENT
 ========================================
 */
 router.delete(

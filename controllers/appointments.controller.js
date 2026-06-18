@@ -5,13 +5,6 @@ import { supabase }
 ========================================
 CREATE APPOINTMENT
 ========================================
-Used by:
-- Website chatbot
-- Public chatbot
-- WhatsApp automation
-- Facebook automation
-- Instagram automation
-========================================
 */
 export const createAppointment =
   async (
@@ -24,14 +17,16 @@ export const createAppointment =
       const {
 
         customer_name,
-
         customer_email,
+        customer_phone,
 
         chatbot_id,
-
         user_id,
 
-        calendly_event_link,
+        meeting_link,
+        provider,
+
+        notes,
 
       } = req.body;
 
@@ -49,8 +44,7 @@ export const createAppointment =
           .status(400)
           .json({
 
-            success:
-              false,
+            success: false,
 
             error:
               "chatbot_id and user_id are required",
@@ -67,9 +61,7 @@ export const createAppointment =
         error,
       } =
         await supabase
-          .from(
-            "appointments"
-          )
+          .from("appointments")
           .insert([{
 
             customer_name:
@@ -80,25 +72,39 @@ export const createAppointment =
               customer_email ||
               null,
 
+            customer_phone:
+              customer_phone ||
+              null,
+
             chatbot_id,
 
             user_id,
 
-            calendly_event_link:
-              calendly_event_link ||
+            meeting_link:
+              meeting_link ||
               null,
+
+            provider:
+              provider ||
+              "custom",
+
+            notes:
+              notes ||
+              null,
+
+            status:
+              "pending",
 
           }])
           .select()
-          .maybeSingle();
+          .single();
 
       if (error)
         throw error;
 
       return res.json({
 
-        success:
-          true,
+        success: true,
 
         message:
           "Appointment created successfully",
@@ -118,8 +124,7 @@ export const createAppointment =
         .status(500)
         .json({
 
-          success:
-            false,
+          success: false,
 
           error:
             err.message ||
@@ -131,8 +136,6 @@ export const createAppointment =
 /*
 ========================================
 GET APPOINTMENTS
-========================================
-Dashboard page
 ========================================
 */
 export const getAppointments =
@@ -146,19 +149,12 @@ export const getAppointments =
       const user_id =
         req.user.id;
 
-      /*
-      ========================================
-      GET APPOINTMENTS
-      ========================================
-      */
       const {
         data,
         error,
       } =
         await supabase
-          .from(
-            "appointments"
-          )
+          .from("appointments")
           .select("*")
           .eq(
             "user_id",
@@ -177,8 +173,7 @@ export const getAppointments =
 
       return res.json({
 
-        success:
-          true,
+        success: true,
 
         appointments:
           data || [],
@@ -195,12 +190,125 @@ export const getAppointments =
         .status(500)
         .json({
 
-          success:
-            false,
+          success: false,
 
           error:
             err.message ||
             "Failed to fetch appointments",
+        });
+    }
+  };
+
+/*
+========================================
+UPDATE APPOINTMENT STATUS
+========================================
+*/
+export const updateAppointmentStatus =
+  async (
+    req,
+    res
+  ) => {
+
+    try {
+
+      const { id } =
+        req.params;
+
+      const {
+        status,
+        notes,
+      } = req.body;
+
+      const user_id =
+        req.user.id;
+
+      const validStatuses = [
+
+        "pending",
+        "accepted",
+        "rejected",
+        "completed",
+
+      ];
+
+      if (
+        !validStatuses.includes(
+          status
+        )
+      ) {
+
+        return res
+          .status(400)
+          .json({
+
+            success: false,
+
+            error:
+              "Invalid status",
+          });
+      }
+
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .from("appointments")
+          .update({
+
+            status,
+
+            notes:
+              notes ||
+              null,
+
+            updated_at:
+              new Date()
+                .toISOString(),
+
+          })
+          .eq(
+            "id",
+            id
+          )
+          .eq(
+            "user_id",
+            user_id
+          )
+          .select()
+          .single();
+
+      if (error)
+        throw error;
+
+      return res.json({
+
+        success: true,
+
+        message:
+          "Appointment updated successfully",
+
+        appointment:
+          data,
+      });
+
+    } catch (err) {
+
+      console.error(
+        "❌ UPDATE APPOINTMENT ERROR:",
+        err
+      );
+
+      return res
+        .status(500)
+        .json({
+
+          success: false,
+
+          error:
+            err.message ||
+            "Failed to update appointment",
         });
     }
   };
@@ -225,18 +333,11 @@ export const deleteAppointment =
       const user_id =
         req.user.id;
 
-      /*
-      ========================================
-      DELETE
-      ========================================
-      */
       const {
         error,
       } =
         await supabase
-          .from(
-            "appointments"
-          )
+          .from("appointments")
           .delete()
           .eq(
             "id",
@@ -252,8 +353,7 @@ export const deleteAppointment =
 
       return res.json({
 
-        success:
-          true,
+        success: true,
 
         message:
           "Appointment deleted successfully",
@@ -270,8 +370,7 @@ export const deleteAppointment =
         .status(500)
         .json({
 
-          success:
-            false,
+          success: false,
 
           error:
             err.message ||
@@ -296,19 +395,12 @@ export const getAppointmentStats =
       const user_id =
         req.user.id;
 
-      /*
-      ========================================
-      GET APPOINTMENTS
-      ========================================
-      */
       const {
         data,
         error,
       } =
         await supabase
-          .from(
-            "appointments"
-          )
+          .from("appointments")
           .select("*")
           .eq(
             "user_id",
@@ -321,42 +413,53 @@ export const getAppointmentStats =
       const appointments =
         data || [];
 
-      /*
-      ========================================
-      STATS
-      ========================================
-      */
       const totalAppointments =
         appointments.length;
 
-      const customers =
+      const pending =
         appointments.filter(
-          (
-            item
-          ) =>
-            item.customer_name
+          item =>
+            item.status ===
+            "pending"
         ).length;
 
-      const bookedMeetings =
+      const accepted =
         appointments.filter(
-          (
-            item
-          ) =>
-            item.calendly_event_link
+          item =>
+            item.status ===
+            "accepted"
+        ).length;
+
+      const rejected =
+        appointments.filter(
+          item =>
+            item.status ===
+            "rejected"
+        ).length;
+
+      const completed =
+        appointments.filter(
+          item =>
+            item.status ===
+            "completed"
         ).length;
 
       return res.json({
 
-        success:
-          true,
+        success: true,
 
         stats: {
 
           totalAppointments,
 
-          customers,
+          pending,
 
-          bookedMeetings,
+          accepted,
+
+          rejected,
+
+          completed,
+
         },
       });
 
@@ -371,8 +474,7 @@ export const getAppointmentStats =
         .status(500)
         .json({
 
-          success:
-            false,
+          success: false,
 
           error:
             "Failed to fetch appointment stats",
