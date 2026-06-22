@@ -307,25 +307,37 @@ export const requireSubscription =
       ADMIN BYPASS
       ========================================
       */
-      const ADMIN_EMAILS =
-        process.env
-          .ADMIN_EMAILS
-          ?.split(",") || [];
+     const ADMIN_EMAILS = (
+  process.env.ADMIN_EMAILS || ""
+)
+  .split(",")
+  .map((email) =>
+    email.trim().toLowerCase()
+  )
+  .filter(Boolean);
 
-      if (
-        ADMIN_EMAILS.includes(
-          req.user.email
-        )
-      ) {
+if (
+  req.user?.email &&
+  ADMIN_EMAILS.includes(
+    req.user.email
+      .trim()
+      .toLowerCase()
+  )
+) {
+  req.subscription = {
+    plan: PLAN_TYPES.PRO,
+    expires_at:
+      "2099-12-31T23:59:59.999Z",
+  };
 
-        req.plan =
-          PLAN_TYPES.PRO;
+  req.plan =
+    PLAN_TYPES.PRO;
 
-        req.features =
-          PLAN_FEATURES.pro;
+  req.features =
+    PLAN_FEATURES.pro;
 
-        return next();
-      }
+  return next();
+}
 
       /*
       ========================================

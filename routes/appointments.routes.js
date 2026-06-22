@@ -19,7 +19,7 @@ import {
 } from "../middleware/auth.js";
 
 import {
-  checkSubscription,
+  requireSubscription,
 } from "../middleware/subscription.js";
 
 const router =
@@ -148,7 +148,7 @@ Statuses:
 router.patch(
   "/:id/status",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   updateAppointmentStatus
 );
 
@@ -160,7 +160,7 @@ DELETE APPOINTMENT
 router.delete(
   "/:id",
   authMiddleware,
-  checkSubscription,
+  requireSubscription,
   deleteAppointment
 );
 
