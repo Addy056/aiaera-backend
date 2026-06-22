@@ -326,22 +326,20 @@ export const getPublicChatbot =
 
         subscription_expired,
 
-        integrations: {
+       integrations: {
 
-          provider:
-            integrations?.provider ||
-            "calendly",
+  meeting_provider:
+    integrations?.meeting_provider ||
+    "calendly",
 
-          meeting_link:
-            integrations?.meeting_link ||
-            integrations?.calendly_link ||
-            "",
+  meeting_link:
+    integrations?.meeting_link ||
+    "",
 
-          maps:
-            integrations?.maps ||
-            integrations?.google_maps_link ||
-            "",
-        },
+  maps_link:
+    integrations?.maps_link ||
+    "",
+},
 
         chatbot,
       });
@@ -821,6 +819,52 @@ const {
       visitorId
     )
     .maybeSingle();
+    /*
+      ========================================
+      LOCATION QUICK REPLY
+      ========================================
+      */
+      if (
+
+        lowerMessage.includes(
+          "location"
+        ) ||
+
+        lowerMessage.includes(
+          "office"
+        ) ||
+
+        lowerMessage.includes(
+          "address"
+        ) ||
+
+        lowerMessage.includes(
+          "visit"
+        ) ||
+
+        lowerMessage.includes(
+          "map"
+        )
+
+      ) {
+
+        const mapsLink =
+  integrations?.maps_link;
+
+        if (mapsLink) {
+
+          return res.json({
+
+            success:
+              true,
+
+            reply:
+`📍 You can visit us here:
+
+${mapsLink}`,
+          });
+        }
+      }
    /*
 ========================================
 APPOINTMENT REQUEST
@@ -1057,8 +1101,8 @@ if (
           null,
 
         provider:
-          integrations?.provider ||
-          "custom",
+  integrations?.meeting_provider ||
+  "custom",
 
         status:
           "pending",
@@ -1093,53 +1137,7 @@ ${integrations.meeting_link || integrations.calendly_link}`
   });
 }
 
-      /*
-      ========================================
-      LOCATION QUICK REPLY
-      ========================================
-      */
-      if (
-
-        lowerMessage.includes(
-          "location"
-        ) ||
-
-        lowerMessage.includes(
-          "office"
-        ) ||
-
-        lowerMessage.includes(
-          "address"
-        ) ||
-
-        lowerMessage.includes(
-          "visit"
-        ) ||
-
-        lowerMessage.includes(
-          "map"
-        )
-
-      ) {
-
-        const mapsLink =
-          integrations?.maps ||
-          integrations?.google_maps_link;
-
-        if (mapsLink) {
-
-          return res.json({
-
-            success:
-              true,
-
-            reply:
-`📍 You can visit us here:
-
-${mapsLink}`,
-          });
-        }
-      }
+      
 
       /*
       ========================================
@@ -1176,14 +1174,13 @@ BEHAVIOR RULES:
 
 - If a user asks for:
   appointment
-  booking
-  demo
-  meeting
-  consultation
-  call
-  visit
-  pricing
-  quote
+booking
+demo
+meeting
+consultation
+call
+pricing
+quote
 
   ask for:
 
