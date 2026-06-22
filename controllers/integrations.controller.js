@@ -24,7 +24,7 @@ export const saveIntegration =
         WHATSAPP
         ====================================
         */
-        whatsapp_token,
+        whatsapp_access_token,
         whatsapp_phone_id,
         whatsapp_enabled,
 
@@ -34,7 +34,7 @@ export const saveIntegration =
         ====================================
         */
         facebook_page_id,
-        facebook_page_token,
+        facebook_page_access_token,
         facebook_enabled,
 
         /*
@@ -51,7 +51,7 @@ export const saveIntegration =
         BOOKING
         ====================================
         */
-        provider,
+        meeting_provider,
         meeting_link,
 
         /*
@@ -59,7 +59,7 @@ export const saveIntegration =
         LOCATION
         ====================================
         */
-        maps,
+        maps_link,
 
       } = req.body;
 
@@ -85,9 +85,8 @@ export const saveIntegration =
             WHATSAPP
             ====================================
             */
-            whatsapp_token:
-              whatsapp_token ||
-              null,
+           whatsapp_access_token:
+  whatsapp_access_token || null,
 
             whatsapp_phone_id:
               whatsapp_phone_id ||
@@ -106,9 +105,8 @@ export const saveIntegration =
               facebook_page_id ||
               null,
 
-            facebook_page_token:
-              facebook_page_token ||
-              null,
+            facebook_page_access_token:
+  facebook_page_access_token || null,
 
             facebook_enabled:
               facebook_enabled ||
@@ -136,9 +134,8 @@ export const saveIntegration =
             BOOKING
             ====================================
             */
-            provider:
-              provider ||
-              "calendly",
+           meeting_provider:
+  meeting_provider || "calendly",
 
             meeting_link:
               meeting_link ||
@@ -149,9 +146,8 @@ export const saveIntegration =
             LOCATION
             ====================================
             */
-            maps:
-              maps ||
-              null,
+            maps_link:
+  maps_link || null,
 
             updated_at:
               new Date().toISOString(),
@@ -336,10 +332,10 @@ export const getPublicIntegrations =
             "user_integrations"
           )
           .select(`
-            provider,
-            meeting_link,
-            maps
-          `)
+  meeting_provider,
+  meeting_link,
+  maps_link
+`)
           .eq(
             "user_id",
             chatbot.user_id
@@ -704,8 +700,7 @@ export const deleteIntegration =
 
         updateData = {
 
-          whatsapp_token:
-            null,
+         whatsapp_access_token: null,
 
           whatsapp_phone_id:
             null,
@@ -725,8 +720,7 @@ export const deleteIntegration =
           facebook_page_id:
             null,
 
-          facebook_page_token:
-            null,
+          facebook_page_access_token: null,
 
           facebook_enabled:
             false,
