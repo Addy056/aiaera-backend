@@ -72,89 +72,57 @@ export const saveIntegration =
         data,
         error,
       } =
-        await supabase
-          .from(
-            "user_integrations"
-          )
-          .upsert({
+       await supabase
+  .from("user_integrations")
+  .upsert(
+    {
+      user_id,
 
-            user_id,
+      whatsapp_access_token:
+        whatsapp_access_token || null,
 
-            /*
-            ====================================
-            WHATSAPP
-            ====================================
-            */
-           whatsapp_access_token:
-  whatsapp_access_token || null,
+      whatsapp_phone_id:
+        whatsapp_phone_id || null,
 
-            whatsapp_phone_id:
-              whatsapp_phone_id ||
-              null,
+      whatsapp_enabled:
+        whatsapp_enabled || false,
 
-            whatsapp_enabled:
-              whatsapp_enabled ||
-              false,
+      facebook_page_id:
+        facebook_page_id || null,
 
-            /*
-            ====================================
-            FACEBOOK
-            ====================================
-            */
-            facebook_page_id:
-              facebook_page_id ||
-              null,
+      facebook_page_access_token:
+        facebook_page_access_token || null,
 
-            facebook_page_access_token:
-  facebook_page_access_token || null,
+      facebook_enabled:
+        facebook_enabled || false,
 
-            facebook_enabled:
-              facebook_enabled ||
-              false,
+      instagram_business_id:
+        instagram_business_id || null,
 
-            /*
-            ====================================
-            INSTAGRAM
-            ====================================
-            */
-            instagram_business_id:
-              instagram_business_id ||
-              null,
+      instagram_access_token:
+        instagram_access_token || null,
 
-            instagram_access_token:
-              instagram_access_token ||
-              null,
+      instagram_enabled:
+        instagram_enabled || false,
 
-            instagram_enabled:
-              instagram_enabled ||
-              false,
+      meeting_provider:
+        meeting_provider || "calendly",
 
-            /*
-            ====================================
-            BOOKING
-            ====================================
-            */
-           meeting_provider:
-  meeting_provider || "calendly",
+      meeting_link:
+        meeting_link || null,
 
-            meeting_link:
-              meeting_link ||
-              null,
+      maps_link:
+        maps_link || null,
 
-            /*
-            ====================================
-            LOCATION
-            ====================================
-            */
-            maps_link:
-  maps_link || null,
-
-            updated_at:
-              new Date().toISOString(),
-
-          })
-          .select()
-          .maybeSingle();
+      updated_at:
+        new Date().toISOString(),
+    },
+    {
+      onConflict: "user_id",
+    }
+  )
+  .select()
+  .maybeSingle();
 
       if (error)
         throw error;
