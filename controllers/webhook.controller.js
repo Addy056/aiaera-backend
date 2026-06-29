@@ -282,23 +282,62 @@ export const handleWhatsAppWebhook =
         });
 
       /*
-      ========================================
-      SEND REPLY
-      ========================================
-      */
-      await sendWhatsAppMessage({
+========================================
+DEBUG
+========================================
+*/
+console.log("========================================");
+console.log("Incoming WhatsApp:", text);
+console.log("Phone:", from);
+console.log("Phone Number ID:", integration.whatsapp_phone_id);
+console.log(
+  "Access Token Available:",
+  !!integration.whatsapp_access_token
+);
+console.log("Chatbot:", chatbot.name);
+console.log("AI Reply:", reply);
+console.log("========================================");
 
-        phoneNumberId:
-          integration.whatsapp_phone_id,
+/*
+========================================
+SEND REPLY
+========================================
+*/
+const result =
+  await sendWhatsAppMessage({
 
-        accessToken:
-          integration.whatsapp_access_token,
-        to: from,
+    phoneNumberId:
+      integration.whatsapp_phone_id,
 
-        message: reply,
-      });
+    accessToken:
+      integration.whatsapp_access_token,
 
-      return res.sendStatus(200);
+    to: from,
+
+    message: reply,
+  });
+
+console.log("========================================");
+console.log("WHATSAPP API RESULT");
+console.log(result);
+console.log("========================================");
+
+if (!result.success) {
+
+  console.error(
+    "❌ WhatsApp send failed:",
+    result.error
+  );
+
+  return res.status(500).json({
+    success: false,
+    error: result.error,
+  });
+}
+
+console.log("✅ WhatsApp reply sent successfully.");
+
+return res.sendStatus(200);
 
     } catch (err) {
 
