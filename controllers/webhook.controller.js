@@ -292,8 +292,7 @@ export const handleWhatsAppWebhook =
           integration.whatsapp_phone_id,
 
         accessToken:
-          integration.whatsapp_token,
-
+          integration.whatsapp_access_token,
         to: from,
 
         message: reply,
@@ -432,7 +431,7 @@ export const handleFacebookWebhook =
       await sendFacebookMessage({
 
         pageToken:
-          integration.facebook_page_token,
+          integration.facebook_page_access_token,
 
         recipientId:
           senderId,
