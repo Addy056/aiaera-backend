@@ -138,9 +138,12 @@ const getUserChatbot =
 WHATSAPP WEBHOOK
 ========================================
 */
-export const handleWhatsAppWebhook =
-  async (req, res) => {
+export const handleWhatsAppWebhook = async (req, res) => {
+  console.log("🔥🔥🔥 WEBHOOK HIT");
+  console.log("METHOD:", req.method);
+  console.log("BODY:", JSON.stringify(req.body));
 
+  
     try {
 
       const body =
@@ -325,14 +328,11 @@ console.log("========================================");
 if (!result.success) {
 
   console.error(
-    "❌ WhatsApp send failed:",
-    result.error
-  );
+  "❌ WhatsApp send failed:",
+  result.error
+);
 
-  return res.status(500).json({
-    success: false,
-    error: result.error,
-  });
+return res.sendStatus(200);
 }
 
 console.log("✅ WhatsApp reply sent successfully.");
