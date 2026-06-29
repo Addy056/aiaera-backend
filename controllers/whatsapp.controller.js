@@ -286,7 +286,7 @@ export const receiveWebhook =
       ========================================
       */
       if (
-        !integration.whatsapp_token
+        !integration.whatsapp_access_token
       ) {
 
         console.error(
@@ -532,7 +532,7 @@ Rules:
           headers: {
 
             Authorization:
-              `Bearer ${integration.whatsapp_token}`,
+              `Bearer ${integration.whatsapp_access_token}`,
 
             "Content-Type":
               "application/json",

@@ -39,9 +39,6 @@ import paymentRoutes
 import publicRoutes
   from "./routes/public.routes.js";
 
-import whatsappRoutes
-  from "./routes/whatsapp.routes.js";
-
 import webhookRoutes
   from "./routes/webhook.routes.js";
 
@@ -429,10 +426,7 @@ app.use(
   paymentRoutes
 );
 
-app.use(
-  "/api/whatsapp",
-  whatsappRoutes
-);
+
 
 app.use(
   "/api/webhooks",
