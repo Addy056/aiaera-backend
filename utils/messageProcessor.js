@@ -15,7 +15,7 @@ export const isDuplicateMessage =
         data,
         error,
       } = await supabase
-        .from("messages_handled")
+        .from("processed_messages")
         .select("id")
         .eq(
           "message_id",
@@ -59,7 +59,7 @@ export const markMessageHandled =
       const {
         error,
       } = await supabase
-        .from("messages_handled")
+        .from("processed_messages")
         .insert([
           {
             message_id:
@@ -73,7 +73,15 @@ export const markMessageHandled =
           "MARK MESSAGE ERROR:",
           error
         );
+
+        return false;
       }
+
+      console.log(
+        "✅ Message marked as handled."
+      );
+
+      return true;
 
     } catch (err) {
 
@@ -81,6 +89,8 @@ export const markMessageHandled =
         "MARK MESSAGE EXCEPTION:",
         err
       );
+
+      return false;
     }
   };
 
