@@ -221,26 +221,27 @@ export const handleWhatsAppWebhook = async (req, res) => {
       ========================================
       */
       const {
-        data: integration,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .select("*")
-        .eq(
-          "whatsapp_phone_id",
-          phone_id
-        )
-        .single();
+  data: integration,
+  error: integrationError,
+} = await supabase
+  .from("user_integrations")
+  .select("*")
+  .eq("whatsapp_phone_id", phone_id)
+  .maybeSingle();
 
-      if (
-        !integration ||
-        !integration.whatsapp_enabled
-      ) {
+console.log("Phone ID:", phone_id);
+console.log("Integration:", integration);
+console.log("Integration Error:", integrationError);
 
-        return res.sendStatus(200);
-      }
+if (!integration) {
+  console.log("❌ No integration found.");
+  return res.sendStatus(200);
+}
 
+if (!integration.whatsapp_enabled) {
+  console.log("❌ WhatsApp integration disabled.");
+  return res.sendStatus(200);
+}
       /*
       ========================================
       FIND CHATBOT
