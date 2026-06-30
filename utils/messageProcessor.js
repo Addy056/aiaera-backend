@@ -9,20 +9,41 @@ CHECK DUPLICATE MESSAGE
 export const isDuplicateMessage =
   async (messageId) => {
 
-    const {
-      data,
-    } = await supabase
-      .from(
-        "messages_handled"
-      )
-      .select("id")
-      .eq(
-        "message_id",
-        messageId
-      )
-      .single();
+    try {
 
-    return !!data;
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("messages_handled")
+        .select("id")
+        .eq(
+          "message_id",
+          messageId
+        )
+        .maybeSingle();
+
+      if (error) {
+
+        console.error(
+          "CHECK DUPLICATE ERROR:",
+          error
+        );
+
+        return false;
+      }
+
+      return !!data;
+
+    } catch (err) {
+
+      console.error(
+        "CHECK DUPLICATE EXCEPTION:",
+        err
+      );
+
+      return false;
+    }
   };
 
 /*
@@ -33,16 +54,34 @@ MARK MESSAGE HANDLED
 export const markMessageHandled =
   async (messageId) => {
 
-    await supabase
-      .from(
-        "messages_handled"
-      )
-      .insert([
-        {
-          message_id:
-            messageId,
-        },
-      ]);
+    try {
+
+      const {
+        error,
+      } = await supabase
+        .from("messages_handled")
+        .insert([
+          {
+            message_id:
+              messageId,
+          },
+        ]);
+
+      if (error) {
+
+        console.error(
+          "MARK MESSAGE ERROR:",
+          error
+        );
+      }
+
+    } catch (err) {
+
+      console.error(
+        "MARK MESSAGE EXCEPTION:",
+        err
+      );
+    }
   };
 
 /*
@@ -61,28 +100,54 @@ export const saveLead =
 
     try {
 
-      await supabase
+      const {
+        error,
+      } = await supabase
         .from("leads")
         .insert([
           {
             user_id,
+
             chatbot_id,
 
             name:
-              name || "WhatsApp User",
+              name ||
+              "WhatsApp User",
 
             email:
-              `${phone}@whatsapp.com`,
+              phone
+                ? `${phone}@whatsapp.com`
+                : null,
+
+            phone,
 
             message,
           },
         ]);
 
+      if (error) {
+
+        console.error(
+          "SAVE LEAD ERROR:",
+          error
+        );
+
+        return false;
+      }
+
+      console.log(
+        "✅ Lead saved successfully."
+      );
+
+      return true;
+
     } catch (err) {
 
       console.error(
-        "SAVE LEAD ERROR:",
-        err.message
+        "SAVE LEAD EXCEPTION:",
+        err
       );
+
+      return false;
     }
   };

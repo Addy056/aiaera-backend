@@ -41,29 +41,35 @@ const verifyWebhook =
   (req, res) => {
 
     const mode =
-      req.query[
-        "hub.mode"
-      ];
+      req.query["hub.mode"];
 
     const token =
-      req.query[
-        "hub.verify_token"
-      ];
+      req.query["hub.verify_token"];
 
     const challenge =
-      req.query[
-        "hub.challenge"
-      ];
+      req.query["hub.challenge"];
+
+    console.log("====================================");
+    console.log("VERIFY WEBHOOK");
+    console.log("Mode:", mode);
+    console.log("Token:", token);
+    console.log("Expected Token:", VERIFY_TOKEN);
+    console.log("Challenge:", challenge);
+    console.log("====================================");
 
     if (
       mode === "subscribe" &&
       token === VERIFY_TOKEN
     ) {
 
+      console.log("✅ Verification Successful");
+
       return res
         .status(200)
         .send(challenge);
     }
+
+    console.log("❌ Verification Failed");
 
     return res.sendStatus(403);
   };
@@ -208,7 +214,7 @@ export const handleWhatsAppWebhook = async (req, res) => {
       await markMessageHandled(
         messageId
       );
-
+      console.log("✅ Duplicate check passed");
       /*
       ========================================
       FIND INTEGRATION
