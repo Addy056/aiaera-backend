@@ -281,7 +281,7 @@ Must come BEFORE global parser
 ========================================
 */
 app.use(
-  "/api/whatsapp",
+  "/api/webhooks",
   express.json({
     limit: "20mb",
   })
@@ -541,7 +541,7 @@ HEALTH:
 http://localhost:${PORT}/api/test
 
 WHATSAPP WEBHOOK:
-http://localhost:${PORT}/api/whatsapp/webhook
+http://localhost:${PORT}/api/webhooks/whatsapp
 
 ========================================
 `);
