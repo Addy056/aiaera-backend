@@ -145,10 +145,13 @@ WHATSAPP WEBHOOK
 ========================================
 */
 export const handleWhatsAppWebhook = async (req, res) => {
-  console.log("🔥🔥🔥 WEBHOOK HIT");
-  console.log("METHOD:", req.method);
-  console.log("BODY:", JSON.stringify(req.body));
-
+  console.log("=================================");
+  console.log("🔥 WEBHOOK HIT");
+  console.log("HEADERS:");
+  console.log(req.headers);
+  console.log("BODY:");
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log("=================================");
   
     try {
 
