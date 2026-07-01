@@ -58,6 +58,27 @@ const app = express();
 
 /*
 ========================================
+GLOBAL REQUEST LOGGER
+DEBUG WHATSAPP WEBHOOK
+========================================
+*/
+app.use((req, res, next) => {
+
+  console.log("========================================");
+  console.log("🌍 GLOBAL REQUEST");
+  console.log("Time:", new Date().toISOString());
+  console.log("Method:", req.method);
+  console.log("URL:", req.originalUrl);
+  console.log("IP:", req.ip);
+  console.log("User-Agent:", req.headers["user-agent"]);
+  console.log("========================================");
+
+  next();
+
+});
+
+/*
+========================================
 ES MODULE FIX
 ========================================
 */
