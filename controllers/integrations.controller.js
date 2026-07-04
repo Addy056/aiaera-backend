@@ -16,7 +16,10 @@ export const saveIntegration =
 
       const user_id =
         req.user.id;
-
+console.log("========================================");
+console.log("SAVE INTEGRATION REQUEST");
+console.log(req.body);
+console.log("========================================");
       const {
 
         /*
