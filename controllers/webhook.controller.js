@@ -571,18 +571,21 @@ console.log("========================================");
       ========================================
       */
       const {
-        data: integration,
-      } = await supabase
-        .from(
-          "user_integrations"
-        )
-        .select("*")
-        .eq(
-          "instagram_enabled",
-          true
-        )
-        .limit(1)
-        .single();
+  data: integration,
+  error: integrationError,
+} = await supabase
+  .from("user_integrations")
+  .select("*")
+  .eq("instagram_enabled", true)
+  .limit(1)
+  .single();
+
+console.log("========================================");
+console.log("INSTAGRAM INTEGRATION");
+console.log(integration);
+console.log("ERROR:");
+console.log(integrationError);
+console.log("========================================");
 
       if (!integration) {
 
@@ -598,7 +601,10 @@ console.log("========================================");
         await getUserChatbot(
           integration.user_id
         );
-
+console.log("========================================");
+console.log("CHATBOT");
+console.log(chatbot);
+console.log("========================================");
       if (!chatbot) {
 
         return res.sendStatus(200);
@@ -612,6 +618,7 @@ console.log("========================================");
       const reply =
         await generateAIReply({
 
+          
           message: text,
 
           chatbot_id:
@@ -620,34 +627,56 @@ console.log("========================================");
           session_id:
             senderId,
         });
-
+console.log("========================================");
+console.log("AI REPLY");
+console.log(reply);
+console.log("========================================");
       /*
-      ========================================
-      SEND MESSAGE
-      ========================================
-      */
-      await sendInstagramMessage({
+========================================
+SEND MESSAGE
+========================================
+*/
+const result =
+  await sendInstagramMessage({
 
-        accessToken:
-          integration.instagram_access_token,
+    accessToken:
+      integration.instagram_access_token,
 
-        recipientId:
-          senderId,
+    recipientId:
+      senderId,
 
-        message:
-          reply,
-      });
+    message:
+      reply,
+  });
 
-      return res.sendStatus(200);
+console.log("========================================");
+console.log("INSTAGRAM SEND RESULT");
+console.log(result);
+console.log("========================================");
 
-    } catch (err) {
+if (!result.success) {
 
-      console.error(
-        "INSTAGRAM WEBHOOK ERROR:",
-        err.response?.data ||
-        err.message
-      );
+  console.error(
+    "❌ Instagram send failed:",
+    result
+  );
 
-      return res.sendStatus(500);
-    }
-  };
+  return res.sendStatus(200);
+
+}
+
+console.log("✅ Instagram reply sent successfully.");
+
+return res.sendStatus(200);
+
+} catch (err) {
+
+  console.error(
+    "INSTAGRAM WEBHOOK ERROR:",
+    err.response?.data ||
+    err.message
+  );
+
+  return res.sendStatus(500);
+}
+};
