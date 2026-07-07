@@ -386,6 +386,10 @@ export const handleFacebookWebhook =
       const senderId =
         messaging.sender?.id;
 
+      const pageId =
+        messaging.recipient?.id ||
+        body.entry?.[0]?.id;
+
       const text =
         messaging.message?.text;
 
@@ -423,19 +427,39 @@ export const handleFacebookWebhook =
       */
       const {
         data: integration,
+        error: integrationError,
       } = await supabase
         .from(
           "user_integrations"
         )
         .select("*")
         .eq(
+          "facebook_page_id",
+          pageId
+        )
+        .eq(
           "facebook_enabled",
           true
         )
         .limit(1)
-        .single();
+        .maybeSingle();
+
+      if (integrationError) {
+
+        console.error(
+          "FACEBOOK INTEGRATION LOOKUP ERROR:",
+          integrationError
+        );
+
+        return res.sendStatus(200);
+      }
 
       if (!integration) {
+
+        console.log(
+          "No Facebook integration for Page:",
+          pageId
+        );
 
         return res.sendStatus(200);
       }
@@ -454,6 +478,29 @@ export const handleFacebookWebhook =
 
         return res.sendStatus(200);
       }
+
+      /*
+      ========================================
+      SAVE LEAD
+      ========================================
+      */
+      await saveLead({
+
+        user_id:
+          integration.user_id,
+
+        chatbot_id:
+          chatbot.id,
+
+        name:
+          "Facebook User",
+
+        phone:
+          senderId,
+
+        message:
+          text,
+      });
 
       /*
       ========================================
@@ -523,9 +570,11 @@ console.log("========================================");
       const body =
         req.body;
 
+      const entry =
+        body.entry?.[0];
+
       const messaging =
-        body.entry?.[0]
-          ?.messaging?.[0];
+        entry?.messaging?.[0];
 
       if (!messaging) {
 
@@ -534,6 +583,10 @@ console.log("========================================");
 
       const senderId =
         messaging.sender?.id;
+
+      const instagramBusinessId =
+        messaging.recipient?.id ||
+        entry?.id;
 
       const text =
         messaging.message?.text;
@@ -576,16 +629,34 @@ console.log("========================================");
 } = await supabase
   .from("user_integrations")
   .select("*")
-  .eq("instagram_enabled", true)
+  .eq(
+    "instagram_business_id",
+    instagramBusinessId
+  )
+  .eq(
+    "instagram_enabled",
+    true
+  )
   .limit(1)
-  .single();
+  .maybeSingle();
 
 console.log("========================================");
 console.log("INSTAGRAM INTEGRATION");
 console.log(integration);
+console.log("Instagram Business ID:", instagramBusinessId);
 console.log("ERROR:");
 console.log(integrationError);
 console.log("========================================");
+
+      if (integrationError) {
+
+        console.error(
+          "INSTAGRAM INTEGRATION LOOKUP ERROR:",
+          integrationError
+        );
+
+        return res.sendStatus(200);
+      }
 
       if (!integration) {
 
@@ -609,6 +680,29 @@ console.log("========================================");
 
         return res.sendStatus(200);
       }
+
+      /*
+      ========================================
+      SAVE LEAD
+      ========================================
+      */
+      await saveLead({
+
+        user_id:
+          integration.user_id,
+
+        chatbot_id:
+          chatbot.id,
+
+        name:
+          "Instagram User",
+
+        phone:
+          senderId,
+
+        message:
+          text,
+      });
 
       /*
       ========================================

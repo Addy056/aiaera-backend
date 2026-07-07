@@ -42,6 +42,9 @@ import publicRoutes
 import webhookRoutes
   from "./routes/webhook.routes.js";
 
+import metaRoutes
+  from "./routes/meta.routes.js";
+
 /*
 ========================================
 ENV CONFIG
@@ -430,6 +433,11 @@ app.use(
 app.use(
   "/api/integrations",
   integrationsRoutes
+);
+
+app.use(
+  "/api/meta",
+  metaRoutes
 );
 
 app.use(
