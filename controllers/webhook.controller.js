@@ -730,6 +730,12 @@ console.log("========================================");
 SEND MESSAGE
 ========================================
 */
+console.log("Instagram Token:", integration.instagram_access_token?.substring(0, 20));
+console.log("Facebook Page Token:", integration.facebook_page_access_token?.substring(0, 20));
+console.log(
+  "Tokens Match:",
+  integration.instagram_access_token === integration.facebook_page_access_token
+);
 const result =
   await sendInstagramMessage({
 

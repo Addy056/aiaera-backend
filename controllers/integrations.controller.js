@@ -22,49 +22,39 @@ console.log(req.body);
 console.log("========================================");
       const {
 
-        /*
-        ====================================
-        WHATSAPP
-        ====================================
-        */
-        whatsapp_access_token,
-        whatsapp_phone_id,
-        whatsapp_enabled,
+  /*
+  ====================================
+  WHATSAPP
+  ====================================
+  */
+  whatsapp_access_token,
+  whatsapp_phone_id,
+  whatsapp_enabled,
 
-        /*
-        ====================================
-        FACEBOOK
-        ====================================
-        */
-        facebook_page_id,
-        facebook_page_access_token,
-        facebook_enabled,
+  /*
+  ====================================
+  META AUTOMATION
+  ====================================
+  */
+  facebook_enabled,
+  instagram_enabled,
 
-        /*
-        ====================================
-        INSTAGRAM
-        ====================================
-        */
-        instagram_business_id,
-        instagram_access_token,
-        instagram_enabled,
+  /*
+  ====================================
+  BOOKING
+  ====================================
+  */
+  meeting_provider,
+  meeting_link,
 
-        /*
-        ====================================
-        BOOKING
-        ====================================
-        */
-        meeting_provider,
-        meeting_link,
+  /*
+  ====================================
+  LOCATION
+  ====================================
+  */
+  maps_link,
 
-        /*
-        ====================================
-        LOCATION
-        ====================================
-        */
-        maps_link,
-
-      } = req.body;
+} = req.body;
 
       /*
       ========================================
@@ -123,35 +113,33 @@ console.log("========================================");
           ?.whatsapp_enabled ??
         false,
 
-      facebook_page_id:
-        facebook_page_id ??
-        existingIntegration
-          ?.facebook_page_id ??
-        null,
+      /*
+========================================
+META OAUTH MANAGED FIELDS
+Never overwrite from the integrations page.
+Only completeMetaOAuth() may update these.
+========================================
+*/
+facebook_page_id:
+  existingIntegration?.facebook_page_id ??
+  null,
 
-      facebook_page_access_token:
-        facebook_page_access_token ??
-        existingIntegration
-          ?.facebook_page_access_token ??
-        null,
+facebook_page_access_token:
+  existingIntegration?.facebook_page_access_token ??
+  null,
 
-      facebook_enabled:
-        facebook_enabled ??
-        existingIntegration
-          ?.facebook_enabled ??
-        false,
+instagram_business_id:
+  existingIntegration?.instagram_business_id ??
+  null,
 
-      instagram_business_id:
-        instagram_business_id ??
-        existingIntegration
-          ?.instagram_business_id ??
-        null,
+instagram_access_token:
+  existingIntegration?.instagram_access_token ??
+  null,
 
-      instagram_access_token:
-        instagram_access_token ??
-        existingIntegration
-          ?.instagram_access_token ??
-        null,
+  facebook_enabled:
+  facebook_enabled ??
+  existingIntegration?.facebook_enabled ??
+  false,
 
       instagram_enabled:
         instagram_enabled ??
@@ -742,39 +730,28 @@ export const deleteIntegration =
       }
 
       if (
-        platform ===
-        "facebook"
-      ) {
+  platform ===
+  "facebook"
+) {
 
-        updateData = {
+  updateData = {
 
-          facebook_page_id:
-            null,
+    facebook_enabled:
+      false,
+  };
+}
 
-          facebook_page_access_token: null,
+     if (
+  platform ===
+  "instagram"
+) {
 
-          facebook_enabled:
-            false,
-        };
-      }
+  updateData = {
 
-      if (
-        platform ===
-        "instagram"
-      ) {
-
-        updateData = {
-
-          instagram_business_id:
-            null,
-
-          instagram_access_token:
-            null,
-
-          instagram_enabled:
-            false,
-        };
-      }
+    instagram_enabled:
+      false,
+  };
+}
 
       /*
       ========================================
