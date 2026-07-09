@@ -192,16 +192,22 @@ export const handleOAuthCallback =
 
       if (error) {
 
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            error:
-              error_description ||
-              error,
-          });
-      }
+  console.error(
+    "Meta OAuth Error:",
+    error,
+    error_description
+  );
+
+  return res
+    .status(400)
+    .json({
+      success: false,
+      error:
+        error_description ||
+        error,
+    });
+
+}
 
       const result =
         await completeMetaOAuth({
@@ -217,6 +223,17 @@ export const handleOAuthCallback =
           getSafeRedirectUrl(
             result.returnTo
           );
+          if (
+  !redirectUrl &&
+  result.returnTo
+) {
+
+  console.warn(
+    "Blocked unsafe redirect:",
+    result.returnTo
+  );
+
+}
 
         if (!redirectUrl) {
 

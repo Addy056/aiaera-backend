@@ -145,6 +145,8 @@ WHATSAPP WEBHOOK
 ========================================
 */
 export const handleWhatsAppWebhook = async (req, res) => {
+ if (process.env.NODE_ENV !== "production") {
+
   console.log("=================================");
   console.log("🔥 WEBHOOK HIT");
   console.log("HEADERS:");
@@ -152,6 +154,8 @@ export const handleWhatsAppWebhook = async (req, res) => {
   console.log("BODY:");
   console.log(JSON.stringify(req.body, null, 2));
   console.log("=================================");
+
+}
   
     try {
 
@@ -283,16 +287,48 @@ if (!integration.whatsapp_enabled) {
       GENERATE AI REPLY
       ========================================
       */
-      const reply =
-        await generateAIReply({
+    /*
+========================================
+GENERATE AI REPLY
+========================================
+*/
+const reply =
+  await generateAIReply({
 
-          message: text,
+    message:
+      text,
 
-          chatbot_id:
-            chatbot.id,
+    chatbot_id:
+      chatbot.id,
 
-          session_id: from,
-        });
+    session_id:
+      from,
+
+  });
+
+/*
+========================================
+FALLBACK REPLY
+========================================
+*/
+const finalReply =
+  (
+    reply &&
+    typeof reply === "string" &&
+    reply.trim().length > 0
+  )
+    ? reply.trim()
+    : "Sorry, I'm unable to respond at the moment. Please try again later.";
+
+/*
+========================================
+DEBUG
+========================================
+*/
+console.log("========================================");
+console.log("AI REPLY");
+console.log(finalReply);
+console.log("========================================");
 
       /*
 ========================================
@@ -327,7 +363,8 @@ const result =
 
     to: from,
 
-    message: reply,
+    message:
+  finalReply,
   });
 
 console.log("========================================");
@@ -501,40 +538,75 @@ export const handleFacebookWebhook =
         message:
           text,
       });
+/*
+========================================
+GENERATE AI REPLY
+========================================
+*/
+const reply =
+  await generateAIReply({
 
-      /*
-      ========================================
-      GENERATE AI REPLY
-      ========================================
-      */
-      const reply =
-        await generateAIReply({
+    message:
+      text,
 
-          message: text,
+    chatbot_id:
+      chatbot.id,
 
-          chatbot_id:
-            chatbot.id,
+    session_id:
+      senderId,
 
-          session_id:
-            senderId,
-        });
+  });
+
+/*
+========================================
+FALLBACK REPLY
+========================================
+*/
+const finalReply =
+  (
+    reply &&
+    typeof reply === "string" &&
+    reply.trim().length > 0
+  )
+    ? reply.trim()
+    : "Sorry, I'm unable to respond at the moment. Please try again later.";
+
+/*
+========================================
+DEBUG
+========================================
+*/
+console.log("========================================");
+console.log("AI REPLY");
+console.log(finalReply);
+console.log("========================================");
 
       /*
       ========================================
       SEND MESSAGE
       ========================================
       */
-      await sendFacebookMessage({
+      const result =
+  await sendFacebookMessage({
 
-        pageToken:
-          integration.facebook_page_access_token,
+    pageToken:
+      integration.facebook_page_access_token,
 
-        recipientId:
-          senderId,
+    recipientId:
+      senderId,
 
-        message:
-          reply,
-      });
+    message:
+  finalReply,
+  });
+
+if (!result.success) {
+
+  console.error(
+    "Facebook send failed:",
+    result.error
+  );
+
+}
 
       return res.sendStatus(200);
 
@@ -559,14 +631,17 @@ export const handleInstagramWebhook =
   async (req, res) => {
 
     try {
+if (process.env.NODE_ENV !== "production") {
 
-      console.log("========================================");
-console.log("📩 INSTAGRAM WEBHOOK HIT");
-console.log("HEADERS:");
-console.log(req.headers);
-console.log("BODY:");
-console.log(JSON.stringify(req.body, null, 2));
-console.log("========================================");
+  console.log("========================================");
+  console.log("📩 INSTAGRAM WEBHOOK HIT");
+  console.log("HEADERS:");
+  console.log(req.headers);
+  console.log("BODY:");
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log("========================================");
+
+}
       const body =
         req.body;
 
@@ -639,14 +714,17 @@ console.log("========================================");
   )
   .limit(1)
   .maybeSingle();
+if (process.env.NODE_ENV !== "production") {
 
-console.log("========================================");
-console.log("INSTAGRAM INTEGRATION");
-console.log(integration);
-console.log("Instagram Business ID:", instagramBusinessId);
-console.log("ERROR:");
-console.log(integrationError);
-console.log("========================================");
+  console.log("========================================");
+  console.log("INSTAGRAM INTEGRATION");
+  console.log(integration);
+  console.log("Instagram Business ID:", instagramBusinessId);
+  console.log("ERROR:");
+  console.log(integrationError);
+  console.log("========================================");
+
+}
 
       if (integrationError) {
 
@@ -672,10 +750,14 @@ console.log("========================================");
         await getUserChatbot(
           integration.user_id
         );
-console.log("========================================");
-console.log("CHATBOT");
-console.log(chatbot);
-console.log("========================================");
+if (process.env.NODE_ENV !== "production") {
+
+  console.log("========================================");
+  console.log("CHATBOT");
+  console.log(chatbot);
+  console.log("========================================");
+
+}
       if (!chatbot) {
 
         return res.sendStatus(200);
@@ -709,44 +791,83 @@ console.log("========================================");
       GENERATE AI REPLY
       ========================================
       */
-      const reply =
-        await generateAIReply({
+     /*
+========================================
+GENERATE AI REPLY
+========================================
+*/
+const reply =
+  await generateAIReply({
 
-          
-          message: text,
+    message:
+      text,
 
-          chatbot_id:
-            chatbot.id,
+    chatbot_id:
+      chatbot.id,
 
-          session_id:
-            senderId,
-        });
+    session_id:
+      senderId,
+
+  });
+
+/*
+========================================
+FALLBACK REPLY
+========================================
+*/
+const finalReply =
+  (
+    reply &&
+    typeof reply === "string" &&
+    reply.trim().length > 0
+  )
+    ? reply.trim()
+    : "Sorry, I'm unable to respond at the moment. Please try again later.";
+
+/*
+========================================
+DEBUG
+========================================
+*/
 console.log("========================================");
 console.log("AI REPLY");
-console.log(reply);
+console.log(finalReply);
 console.log("========================================");
       /*
 ========================================
 SEND MESSAGE
 ========================================
 */
-console.log("Instagram Token:", integration.instagram_access_token?.substring(0, 20));
-console.log("Facebook Page Token:", integration.facebook_page_access_token?.substring(0, 20));
-console.log(
-  "Tokens Match:",
-  integration.instagram_access_token === integration.facebook_page_access_token
-);
+if (process.env.NODE_ENV !== "production") {
+
+  console.log(
+    "Instagram Token:",
+    integration.instagram_access_token?.substring(0, 20)
+  );
+
+  console.log(
+    "Facebook Page Token:",
+    integration.facebook_page_access_token?.substring(0, 20)
+  );
+
+  console.log(
+    "Tokens Match:",
+    integration.instagram_access_token ===
+    integration.facebook_page_access_token
+  );
+
+}
 const result =
   await sendInstagramMessage({
 
     accessToken:
-      integration.instagram_access_token,
+      integration.facebook_page_access_token,
 
     recipientId:
       senderId,
 
     message:
-      reply,
+  finalReply,
   });
 
 console.log("========================================");

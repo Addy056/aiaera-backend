@@ -293,14 +293,20 @@ export const getMetaIntegrationStatus =
       await supabase
         .from("user_integrations")
         .select(`
-          facebook_page_id,
-          facebook_page_access_token,
-          facebook_enabled,
-          instagram_business_id,
-          instagram_access_token,
-          instagram_enabled,
-          updated_at
-        `)
+        
+facebook_page_id,
+facebook_page_name,
+facebook_page_access_token,
+facebook_enabled,
+instagram_business_id,
+instagram_username,
+instagram_access_token,
+instagram_enabled,
+meta_connected,
+meta_connected_at,
+last_meta_sync,
+updated_at
+`)
         .eq(
           "user_id",
           user_id
@@ -316,61 +322,50 @@ export const getMetaIntegrationStatus =
       );
     }
 
-    return {
-      connected:
-        Boolean(
-          data?.facebook_page_id &&
-          data?.facebook_page_access_token
-        ),
+   return {
 
-      facebook: {
-        connected:
-          Boolean(
-            data?.facebook_page_id &&
-            data?.facebook_page_access_token
-          ),
+  meta_connected:
+    Boolean(
+      data?.facebook_page_id &&
+      data?.facebook_page_access_token
+    ),
 
-        enabled:
-          Boolean(
-            data?.facebook_enabled
-          ),
+  facebook_page_id:
+    data?.facebook_page_id,
 
-        page_id:
-          data?.facebook_page_id ||
-          null,
+  facebook_page_name:
+    data?.facebook_page_name ||
+    null,
 
-        has_token:
-          Boolean(
-            data?.facebook_page_access_token
-          ),
-      },
+  facebook_enabled:
+    Boolean(
+      data?.facebook_enabled
+    ),
 
-      instagram: {
-        connected:
-          Boolean(
-            data?.instagram_business_id &&
-            data?.instagram_access_token
-          ),
+  instagram_business_id:
+    data?.instagram_business_id,
 
-        enabled:
-          Boolean(
-            data?.instagram_enabled
-          ),
+  instagram_username:
+    data?.instagram_username ||
+    null,
 
-        business_id:
-          data?.instagram_business_id ||
-          null,
+  instagram_enabled:
+    Boolean(
+      data?.instagram_enabled
+    ),
 
-        has_token:
-          Boolean(
-            data?.instagram_access_token
-          ),
-      },
+  last_meta_sync:
+    data?.last_meta_sync ||
+    data?.updated_at,
 
-      updated_at:
-        data?.updated_at ||
-        null,
-    };
+  meta_connected_at:
+    data?.meta_connected_at ||
+    null,
+
+  updated_at:
+    data?.updated_at,
+
+};
   };
 
 /*
@@ -702,6 +697,21 @@ const upsertMetaIntegration =
 
       updated_at:
         new Date().toISOString(),
+        facebook_page_name:
+  page.name,
+
+instagram_username:
+  instagramBusinessAccount?.username ||
+  null,
+
+meta_connected:
+  true,
+
+meta_connected_at:
+  new Date().toISOString(),
+
+last_meta_sync:
+  new Date().toISOString(),
     };
 
     const {
@@ -933,6 +943,15 @@ export const syncMetaIntegration =
             ?.id
         ),
 
+        facebook_page_name:
+  page.name,
+
+instagram_username:
+  page.instagram_business_account?.username ||
+  null,
+
+last_meta_sync:
+  new Date().toISOString(),
       updated_at:
         new Date().toISOString(),
     };
@@ -984,20 +1003,63 @@ export const disconnectMetaIntegration =
       await supabase
         .from("user_integrations")
         .update({
+
+          /*
+          ========================================
+          FACEBOOK
+          ========================================
+          */
           facebook_page_id:
             null,
+
+          facebook_page_name:
+            null,
+
           facebook_page_access_token:
             null,
+
           facebook_enabled:
             false,
+
+          /*
+          ========================================
+          INSTAGRAM
+          ========================================
+          */
           instagram_business_id:
             null,
+
+          instagram_username:
+            null,
+
           instagram_access_token:
             null,
+
           instagram_enabled:
             false,
+
+          /*
+          ========================================
+          META STATUS
+          ========================================
+          */
+          meta_connected:
+            false,
+
+          meta_connected_at:
+            null,
+
+          last_meta_sync:
+            null,
+
+          /*
+          ========================================
+          UPDATED
+          ========================================
+          */
           updated_at:
             new Date().toISOString(),
+
         })
         .eq(
           "user_id",
@@ -1018,4 +1080,6 @@ export const disconnectMetaIntegration =
     return data;
   };
 
-export { MetaOAuthError };
+export {
+  MetaOAuthError,
+};

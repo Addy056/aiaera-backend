@@ -1,5 +1,12 @@
 import axios from "axios";
-
+/*
+========================================
+GRAPH API VERSION
+========================================
+*/
+const GRAPH_API_VERSION =
+  process.env.META_GRAPH_API_VERSION ||
+  "v25.0";
 /*
 ========================================
 SEND INSTAGRAM MESSAGE
@@ -11,9 +18,40 @@ export const sendInstagramMessage =
     recipientId,
     message,
   }) => {
+/*
+========================================
+VALIDATION
+========================================
+*/
+if (!accessToken) {
 
+  return {
+    success: false,
+    error: "Missing access token",
+  };
+
+}
+
+if (!recipientId) {
+
+  return {
+    success: false,
+    error: "Missing recipient id",
+  };
+
+}
+
+if (!message?.trim()) {
+
+  return {
+    success: false,
+    error: "Message is empty",
+  };
+
+}
     try {
 
+      
       console.log("========================================");
       console.log("📤 SENDING INSTAGRAM MESSAGE");
       console.log("Recipient:", recipientId);
@@ -29,7 +67,7 @@ export const sendInstagramMessage =
 
       const response =
         await axios.post(
-          "https://graph.facebook.com/v19.0/me/messages",
+  `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`,
           {
             recipient: {
               id: recipientId,
