@@ -91,6 +91,68 @@ const getSafeRedirectUrl =
     return redirectUrl;
   };
 
+  /*
+========================================
+FRONTEND REDIRECT
+========================================
+*/
+const createFrontendRedirect = (
+  status,
+  options = {}
+) => {
+
+  const frontend =
+    process.env.FRONTEND_URL ||
+    "http://localhost:5173";
+
+ const defaultRedirect =
+  new URL(
+    "/app/integrations",
+    frontend
+  );
+
+const redirectUrl =
+  options.returnTo
+    ? (
+        getSafeRedirectUrl(
+          options.returnTo
+        ) || defaultRedirect
+      )
+    : defaultRedirect;
+  redirectUrl.searchParams.set(
+    "meta_status",
+    status
+  );
+
+  if (options.facebookPageId) {
+
+    redirectUrl.searchParams.set(
+      "facebook_page_id",
+      options.facebookPageId
+    );
+
+  }
+
+  if (options.instagramBusinessId) {
+
+    redirectUrl.searchParams.set(
+      "instagram_business_id",
+      options.instagramBusinessId
+    );
+
+  }
+
+  if (options.reason) {
+
+    redirectUrl.searchParams.set(
+      "reason",
+      options.reason
+    );
+
+  }
+
+  return redirectUrl;
+};
 /*
 ========================================
 CONNECT URL
@@ -190,7 +252,7 @@ export const handleOAuthCallback =
         page_id,
       } = req.query;
 
-      if (error) {
+     if (error) {
 
   console.error(
     "Meta OAuth Error:",
@@ -198,17 +260,21 @@ export const handleOAuthCallback =
     error_description
   );
 
-  return res
-    .status(400)
-    .json({
-      success: false,
-      error:
-        error_description ||
-        error,
-    });
+  const redirectUrl =
+    createFrontendRedirect(
+      "cancelled",
+      {
+        reason:
+          error_description ||
+          error,
+      }
+    );
+
+  return res.redirect(
+    redirectUrl.toString()
+  );
 
 }
-
       const result =
         await completeMetaOAuth({
           code,
@@ -217,92 +283,53 @@ export const handleOAuthCallback =
             page_id,
         });
 
-      if (result.returnTo) {
+      const redirectUrl =
+  createFrontendRedirect(
+    "success",
+    {
+      returnTo:
+        result.returnTo,
 
-        const redirectUrl =
-          getSafeRedirectUrl(
-            result.returnTo
-          );
-          if (
-  !redirectUrl &&
-  result.returnTo
-) {
+      facebookPageId:
+        result.page.id,
 
-  console.warn(
-    "Blocked unsafe redirect:",
-    result.returnTo
+      instagramBusinessId:
+        result.instagram?.id,
+
+      reason:
+        result.instagram
+          ? undefined
+          : "instagram_not_connected",
+    }
+  );
+
+return res.redirect(
+  redirectUrl.toString()
+);
+
+      
+} catch (err) {
+
+  console.error(
+    "Meta OAuth Callback Failed:",
+    err
+  );
+
+  const redirectUrl =
+    createFrontendRedirect(
+      "error",
+      {
+        reason:
+          err.message ||
+          "oauth_failed",
+      }
+    );
+
+  return res.redirect(
+    redirectUrl.toString()
   );
 
 }
-
-        if (!redirectUrl) {
-
-          return res.json({
-            success:
-              true,
-
-            message:
-              "Meta integration connected",
-
-            page:
-              result.page,
-
-            instagram:
-              result.instagram,
-
-            subscribed:
-              result.subscribed,
-          });
-        }
-
-        redirectUrl.searchParams.set(
-          "meta_connected",
-          "true"
-        );
-
-        redirectUrl.searchParams.set(
-          "facebook_page_id",
-          result.page.id
-        );
-
-        if (result.instagram?.id) {
-
-          redirectUrl.searchParams.set(
-            "instagram_business_id",
-            result.instagram.id
-          );
-        }
-
-        return res.redirect(
-          redirectUrl.toString()
-        );
-      }
-
-      return res.json({
-        success:
-          true,
-
-        message:
-          "Meta integration connected",
-
-        page:
-          result.page,
-
-        instagram:
-          result.instagram,
-
-        subscribed:
-          result.subscribed,
-      });
-
-    } catch (err) {
-
-      return handleMetaError(
-        res,
-        err,
-        "Failed to complete Meta OAuth"
-      );
-    }
   };
 
 /*
