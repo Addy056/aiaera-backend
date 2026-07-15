@@ -203,22 +203,7 @@ export const handleWhatsAppWebhook = async (req, res) => {
         text
       );
 
-      /*
-      ========================================
-      DUPLICATE CHECK
-      ========================================
-      */
-      const marked = await markMessageHandled(messageId);
-
-if (!marked) {
-  // Already processed or couldn't mark it.
-  return res.sendStatus(200);
-}
-
-      await markMessageHandled(
-        messageId
-      );
-      console.log("✅ Duplicate check passed");
+     
       /*
       ========================================
       FIND INTEGRATION
@@ -854,6 +839,8 @@ if (process.env.NODE_ENV !== "production") {
   );
 
 }
+console.log("Sender ID:", senderId);
+console.log("Instagram Business ID:", instagramBusinessId);
 const result =
   await sendInstagramMessage({
 
