@@ -208,15 +208,12 @@ export const handleWhatsAppWebhook = async (req, res) => {
       DUPLICATE CHECK
       ========================================
       */
-      const duplicate =
-        await isDuplicateMessage(
-          messageId
-        );
+      const marked = await markMessageHandled(messageId);
 
-      if (duplicate) {
-
-        return res.sendStatus(200);
-      }
+if (!marked) {
+  // Already processed or couldn't mark it.
+  return res.sendStatus(200);
+}
 
       await markMessageHandled(
         messageId
