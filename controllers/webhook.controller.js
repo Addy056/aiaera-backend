@@ -425,19 +425,7 @@ export const handleFacebookWebhook =
       DUPLICATE CHECK
       ========================================
       */
-      const duplicate =
-        await isDuplicateMessage(
-          messageId
-        );
-
-      if (duplicate) {
-
-        return res.sendStatus(200);
-      }
-
-      await markMessageHandled(
-        messageId
-      );
+      console.log("Duplicate check skipped for debugging");
 
       /*
       ========================================
