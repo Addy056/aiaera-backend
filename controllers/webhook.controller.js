@@ -599,6 +599,7 @@ INSTAGRAM WEBHOOK
 */
 export const handleInstagramWebhook =
   async (req, res) => {
+console.log("🚀 INSTAGRAM WEBHOOK START");
 
     try {
 if (process.env.NODE_ENV !== "production") {
@@ -614,6 +615,7 @@ if (process.env.NODE_ENV !== "production") {
 }
       const body =
         req.body;
+        console.log(JSON.stringify(body, null, 2));
 
       const entry =
         body.entry?.[0];
