@@ -171,7 +171,9 @@ export const handleWhatsAppWebhook = async (req, res) => {
         body.entry?.[0]
           ?.changes?.[0]
           ?.value;
-
+const profileName =
+  value?.contacts?.[0]?.profile?.name ||
+  "WhatsApp User";
       const msg =
         value?.messages?.[0];
 
@@ -187,12 +189,23 @@ export const handleWhatsAppWebhook = async (req, res) => {
       */
       const messageId =
         msg.id;
+const duplicate =
+  await isDuplicateMessage(
+    messageId
+  );
+
+if (duplicate) {
+  return res.sendStatus(200);
+}
+
 
       const from =
         msg.from;
 
-      const text =
-        msg.text?.body;
+     const text =
+  String(
+    msg.text?.body || ""
+  ).trim();
 
       const phone_id =
         value?.metadata
@@ -245,30 +258,36 @@ if (!integration.whatsapp_enabled) {
 
         return res.sendStatus(200);
       }
+await markMessageHandled({
 
+  messageId,
+
+  platform: "whatsapp",
+
+  senderId: from,
+
+  chatbotId: chatbot.id,
+
+});
       /*
       ========================================
       SAVE LEAD
       ========================================
       */
-      await saveLead({
+     await saveLead({
+  user_id: integration.user_id,
+  chatbot_id: chatbot.id,
+  name: profileName,
+  phone: from,
+  message: text,
+  source: "whatsapp",
+  metadata: {
+    messageId,
+    platform: "whatsapp",
+  },
+});
 
-        user_id:
-          integration.user_id,
-
-        chatbot_id:
-          chatbot.id,
-
-        phone: from,
-
-        message: text,
-      });
-
-      /*
-      ========================================
-      GENERATE AI REPLY
-      ========================================
-      */
+    
     /*
 ========================================
 GENERATE AI REPLY
@@ -415,17 +434,23 @@ export const handleFacebookWebhook =
       const messageId =
         messaging.message?.mid;
 
-      if (!text) {
-
-        return res.sendStatus(200);
-      }
+      if (!text?.trim()) {
+    return res.sendStatus(200);
+}
 
       /*
       ========================================
       DUPLICATE CHECK
       ========================================
       */
-      console.log("Duplicate check skipped for debugging");
+     const duplicate =
+  await isDuplicateMessage(messageId);
+
+if (duplicate) {
+  return res.sendStatus(200);
+}
+
+
 
       /*
       ========================================
@@ -485,29 +510,34 @@ export const handleFacebookWebhook =
 
         return res.sendStatus(200);
       }
+await markMessageHandled({
 
+  messageId,
+
+  platform: "facebook",
+
+  senderId,
+
+  chatbotId: chatbot.id,
+
+});
       /*
       ========================================
       SAVE LEAD
       ========================================
       */
-      await saveLead({
-
-        user_id:
-          integration.user_id,
-
-        chatbot_id:
-          chatbot.id,
-
-        name:
-          "Facebook User",
-
-        phone:
-          senderId,
-
-        message:
-          text,
-      });
+    await saveLead({
+  user_id: integration.user_id,
+  chatbot_id: chatbot.id,
+  name: "Facebook User",
+  phone: senderId,
+  message: text,
+  source: "facebook",
+  metadata: {
+    messageId,
+    platform: "facebook",
+  },
+});
 /*
 ========================================
 GENERATE AI REPLY
@@ -641,11 +671,9 @@ if (process.env.NODE_ENV !== "production") {
       const messageId =
         messaging.message?.mid;
 
-      if (!text) {
-
-        return res.sendStatus(200);
-      }
-
+     if (!text?.trim()) {
+    return res.sendStatus(200);
+}
       /*
       ========================================
       DUPLICATE CHECK
@@ -661,9 +689,6 @@ if (process.env.NODE_ENV !== "production") {
         return res.sendStatus(200);
       }
 
-      await markMessageHandled(
-        messageId
-      );
 
       /*
       ========================================
@@ -722,6 +747,7 @@ if (process.env.NODE_ENV !== "production") {
         await getUserChatbot(
           integration.user_id
         );
+       
 if (process.env.NODE_ENV !== "production") {
 
   console.log("========================================");
@@ -734,29 +760,29 @@ if (process.env.NODE_ENV !== "production") {
 
         return res.sendStatus(200);
       }
-
+await markMessageHandled({
+  messageId,
+  platform: "instagram",
+  senderId,
+  chatbotId: chatbot.id,
+});
       /*
       ========================================
       SAVE LEAD
       ========================================
       */
-      await saveLead({
-
-        user_id:
-          integration.user_id,
-
-        chatbot_id:
-          chatbot.id,
-
-        name:
-          "Instagram User",
-
-        phone:
-          senderId,
-
-        message:
-          text,
-      });
+     await saveLead({
+  user_id: integration.user_id,
+  chatbot_id: chatbot.id,
+  name: "Instagram User",
+  phone: senderId,
+  message: text,
+  source: "instagram",
+  metadata: {
+    messageId,
+    platform: "instagram",
+  },
+});
 
       /*
       ========================================

@@ -1,92 +1,96 @@
 import axios from "axios";
+
 /*
 ========================================
-GRAPH API VERSION
+GRAPH API CONFIG
 ========================================
 */
+
 const GRAPH_API_VERSION =
   process.env.META_GRAPH_API_VERSION ||
   "v25.0";
+
+const GRAPH_API_URL =
+  `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`;
+
 /*
 ========================================
 SEND INSTAGRAM MESSAGE
 ========================================
 */
+
 export const sendInstagramMessage =
   async ({
     accessToken,
     recipientId,
     message,
   }) => {
-/*
-========================================
-VALIDATION
-========================================
-*/
-if (!accessToken) {
 
-  return {
-    success: false,
-    error: "Missing access token",
-  };
+    const text =
+      String(message || "").trim();
 
-}
+    /*
+    ========================================
+    VALIDATION
+    ========================================
+    */
 
-if (!recipientId) {
+    if (!accessToken) {
+      return {
+        success: false,
+        error: "Missing Instagram access token.",
+      };
+    }
 
-  return {
-    success: false,
-    error: "Missing recipient id",
-  };
+    if (!recipientId) {
+      return {
+        success: false,
+        error: "Missing Instagram recipient ID.",
+      };
+    }
 
-}
+    if (!text) {
+      return {
+        success: false,
+        error: "Message cannot be empty.",
+      };
+    }
 
-if (!message?.trim()) {
-
-  return {
-    success: false,
-    error: "Message is empty",
-  };
-
-}
     try {
 
-      
       console.log("========================================");
       console.log("📤 SENDING INSTAGRAM MESSAGE");
       console.log("Recipient:", recipientId);
-      console.log("Token Length:", accessToken?.length);
+      console.log("Graph API:", GRAPH_API_VERSION);
+      console.log("Token Length:", accessToken.length);
       console.log(
-        "Token Starts With:",
-        accessToken
-          ? `${accessToken.substring(0, 10)}...`
-          : "NULL"
+        "Token Preview:",
+        `${accessToken.substring(0, 10)}...`
       );
-      console.log("Message:", message);
+      console.log("Message:", text);
       console.log("========================================");
 
       const response =
         await axios.post(
-  `https://graph.facebook.com/${GRAPH_API_VERSION}/me/messages`,
+          GRAPH_API_URL,
           {
             recipient: {
               id: recipientId,
             },
-
             message: {
-              text: message,
+              text,
             },
           },
           {
             params: {
-              access_token:
-                accessToken,
+              access_token: accessToken,
             },
+            timeout: 15000,
           }
         );
 
       console.log("========================================");
-      console.log("✅ INSTAGRAM API RESPONSE");
+      console.log("✅ INSTAGRAM MESSAGE SENT");
       console.log(response.data);
       console.log("========================================");
 
@@ -97,23 +101,18 @@ if (!message?.trim()) {
 
     } catch (err) {
 
+      const error =
+        err.response?.data ||
+        err.message;
+
       console.error("========================================");
       console.error("❌ INSTAGRAM SEND ERROR");
-
-      if (err.response) {
-        console.error("Status:", err.response.status);
-        console.error("Response:", err.response.data);
-      } else {
-        console.error(err.message);
-      }
-
+      console.error(error);
       console.error("========================================");
 
       return {
         success: false,
-        error:
-          err.response?.data ||
-          err.message,
+        error,
       };
     }
   };

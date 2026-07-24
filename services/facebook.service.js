@@ -2,9 +2,19 @@ import axios from "axios";
 
 /*
 ========================================
+FACEBOOK GRAPH API
+========================================
+*/
+
+const FACEBOOK_API =
+  "https://graph.facebook.com/v19.0/me/messages";
+
+/*
+========================================
 SEND FACEBOOK MESSAGE
 ========================================
 */
+
 export const sendFacebookMessage =
   async ({
     pageToken,
@@ -14,39 +24,68 @@ export const sendFacebookMessage =
 
     try {
 
-      await axios.post(
-        "https://graph.facebook.com/v19.0/me/messages",
-        {
-          recipient: {
-            id: recipientId,
-          },
+      if (!pageToken) {
+        throw new Error(
+          "Facebook Page Access Token is missing."
+        );
+      }
 
-          message: {
-            text: message,
+      if (!recipientId) {
+        throw new Error(
+          "Facebook Recipient ID is missing."
+        );
+      }
+
+      const text =
+        String(message || "").trim();
+
+      if (!text) {
+        throw new Error(
+          "Message cannot be empty."
+        );
+      }
+
+      const response =
+        await axios.post(
+          FACEBOOK_API,
+          {
+            recipient: {
+              id: recipientId,
+            },
+
+            message: {
+              text,
+            },
           },
-        },
-        {
-          params: {
-            access_token:
-              pageToken,
-          },
-        }
-      );
+          {
+            params: {
+              access_token:
+                pageToken,
+            },
+
+            timeout: 15000,
+          }
+        );
 
       return {
         success: true,
+        data: response.data,
       };
 
     } catch (err) {
 
+      const error =
+        err.response?.data ||
+        err.message;
+
       console.error(
         "FACEBOOK SEND ERROR:",
-        err.response?.data ||
-        err.message
+        error
       );
 
       return {
         success: false,
+        error,
       };
     }
   };

@@ -4,39 +4,90 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
-export const generateAIReply = async (prompt) => {
+const MODEL = "llama-3.1-8b-instant";
+const MAX_HISTORY_MESSAGES = 20;
 
+/*
+========================================
+GENERATE AI REPLY
+========================================
+*/
+
+export const generateAIReply = async ({
+  systemPrompt,
+  userMessage,
+  history = [],
+}) => {
   try {
+    if (!systemPrompt) {
+      throw new Error(
+        "System prompt is required."
+      );
+    }
+
+    const message =
+      String(userMessage || "").trim();
+
+    if (!message) {
+      throw new Error(
+        "User message is required."
+      );
+    }
 
     console.log("🤖 Calling Groq API...");
 
-    const completion =
-      await groq.chat.completions.create({
+    const messages = [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
 
-        model: "llama-3.1-8b-instant",
+      ...(history || [])
+        .slice(-MAX_HISTORY_MESSAGES)
+        .filter(
+  item =>
+    item &&
+    ["system", "user", "assistant"].includes(item.role) &&
+    item.content
+),
 
-        temperature: 0.7,
+      {
+        role: "user",
+        content: message,
+      },
+    ];
 
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      });
+    await groq.chat.completions.create({
+  model: MODEL,
+  temperature: 0.7,
+  max_completion_tokens: 500,
+  messages,
+});
 
     const reply =
-      completion?.choices?.[0]?.message?.content;
+      completion?.choices?.[0]?.message?.content?.trim();
 
     console.log("✅ Groq Reply:");
     console.log(reply);
 
-    return reply || "Sorry, I couldn't generate a reply.";
-
+    return (
+      reply ||
+      "Sorry, I couldn't generate a reply."
+    );
   } catch (err) {
+    console.error(
+      "❌ GROQ ERROR:"
+    );
 
-    console.error("❌ GROQ ERROR");
-    console.error(err);
+    console.error(
+      err?.message || err
+    );
+
+    if (err?.response?.data) {
+      console.error(
+        err.response.data
+      );
+    }
 
     return "Sorry, AI is temporarily unavailable.";
   }
